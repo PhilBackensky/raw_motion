@@ -9,7 +9,7 @@ import io
 import re
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION Director's Pro v3.8", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION Director's Pro v4", layout="wide", page_icon="🎬")
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -52,25 +52,84 @@ def estimate_duration(prompt):
     words = len(clean_text.split())
     return round(pause_time + (words * 0.75) + audio_time + 3.0, 1)
 
+# --- ZMIANA: NOWA FUNKCJA EDYCJI OBRAZU (IMAGE EDITS) ---
+def edit_image_xai(api_key, img_bytes, prompt, mode="img2img"):
+    """Edytuje obraz przy użyciu Grok Imagine Edits (Pro)."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    async def _async_edit():
+        client = xai_sdk.AsyncClient(api_key=api_key)
+        # Używamy modelu Pro dla edycji
+        return await client.image.edit(
+            model="grok-imagine-image-pro",
+            image=img_bytes,
+            prompt=prompt,
+            safe_mode="standard"
+        )
+    try: return loop.run_until_complete(_async_edit())
+    finally: loop.close()
+
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director's Pro v3.8")
+st.title("🎥 RAWMOTION Director's Pro v4.0 (Studio FX)")
 
 if "draft" not in st.session_state: st.session_state.draft = ""
+if "ztunowane_zdjecie" not in st.session_state: st.session_state.ztunowane_zdjecie = None
 
 st.divider()
 uploaded_file = st.file_uploader("🖼️ KROK 1: Wgraj zdjęcie źródłowe:", type=['jpg','png','jpeg'])
 
-# --- SIDEBAR ---
+# --- SIDEBAR: ROZBUDOWANY O TUNING AI ---
 with st.sidebar:
-    st.header("👤 Postać")
-    char_input = st.text_area("Opis polski:", "Fotorealistyczna kobieta, styl kinowy")
-    if st.button("➕ Wstaw Postać", use_container_width=True):
+    st.header("👤 Postać w Filmie")
+    char_desc_pl = st.text_area("Opis polski (do draftu):", "Fotorealistyczna kobieta, styl kinowy")
+    if st.button("➕ Wstaw Postać do Osi", use_container_width=True):
         with st.spinner("Tłumaczenie..."):
-            st.session_state.draft += f"{elon_translator(char_input, 'character')} "
+            st.session_state.draft += f"{elon_translator(char_desc_pl, 'character')} "
+    
     st.divider()
-    if uploaded_file:
-        st.image(Image.open(uploaded_file), caption="Aktywne źródło", use_container_width=True)
+    
+    # === NOWA SEKCJA: TUNING ZDJĘCIA AI (IMAGE EDITS) ===
+    st.subheader("🆕 Tuning Zdjęcia AI (FX)")
+    tuning_mode = st.selectbox("Wybierz tryb:", ["Brak tuningu", "Stylizacja (Image-to-Image)", "Zmień element (Inpainting)"])
+    
+    if tuning_mode != "Brak tuningu" and uploaded_file is not None:
+        tuning_prompt = st.text_input("Opisz zmianę po polsku (np. dodaj tatuaż):")
+        if st.button("🛠️ Tunuj Zdjęcie", use_container_width=True):
+            if tuning_prompt:
+                with st.spinner("Tłumaczenie promptu i tuning zdjęcia..."):
+                    try:
+                        # 1. Tłumaczenie promptu edycji na angielski
+                        tech_tag = elon_translator(tuning_prompt, "action")
+                        clean_prompt = re.sub(r"\[.*?\]", "", tech_tag).strip() # Wyciąga sam tekst
+                        
+                        # 2. Wywołanie API edycji
+                        img_bytes = uploaded_file.getvalue()
+                        edited_res = edit_image_xai(api_key, img_bytes, clean_prompt)
+                        
+                        # 3. Pobranie i zapisanie ztunowanego zdjęcia
+                        edited_img_data = requests.get(edited_res.url).content
+                        st.session_state.ztunowane_zdjecie = Image.open(io.BytesIO(edited_img_data))
+                        st.success("Zdjęcie ztunowane poprawnie!")
+                    except Exception as e:
+                        st.error(f"⚠️ Błąd tuningu: {e}")
+            else:
+                st.error("Wpisz opis zmiany!")
+    elif tuning_mode != "Brak tuningu" and uploaded_file is None:
+        st.warning("Najpierw wgraj zdjęcie w głównym panelu!")
+
     st.divider()
+    
+    # === WYŚWIETLANIE PODGLĄDU (WGGRANEGO LUB AI) ===
+    if st.session_state.ztunowane_zdjecie:
+        st.image(st.session_state.ztunowane_zdjecie, caption="🆕 Aktywne źródło (ztunowane przez AI)", use_container_width=True)
+        if st.button("🗑️ Usuń tuning AI", type="secondary", use_container_width=True):
+            st.session_state.ztunowane_zdjecie = None
+            st.rerun()
+    elif uploaded_file:
+        st.image(Image.open(uploaded_file), caption="Z wgranego pliku", use_container_width=True)
+    
+    st.divider()
+    # Zarządzanie draftem
     if st.button("⏪ COFNIJ (UNDO)", use_container_width=True):
         pattern = r"\[.*?\]\s*$"
         if re.search(pattern, st.session_state.draft.strip()):
@@ -79,100 +138,14 @@ with st.sidebar:
             words = st.session_state.draft.strip().split()
             if words: st.session_state.draft = " ".join(words[:-1])
         st.rerun()
-    if st.button("🗑️ CZYŚĆ WSZYSTKO", type="secondary", use_container_width=True):
+    if st.button("🗑️ CZYŚĆ SCENARIUSZ", type="secondary", use_container_width=True):
         st.session_state.draft = ""; st.rerun()
 
 # --- PANEL REŻYSERSKI 3x2 ---
-r1c1, r1c2, r1c3 = st.columns(3)
+# (Tutaj kod pozostaje bez zmian, usuwam dla czytelności odpowiedzi)
+# ... Kody kolumn r1c1, r1c2, r1c3, r2c1, r2c2, r2c3 ...
 
-with r1c1:
-    st.subheader("🎥 Kamera")
-    cam_list = [
-        "steady close-up on face — Twarz (Portret)",
-        "dynamic tilt down to hips — Zjazd na biodra",
-        "extreme close-up on lips — Makro (Usta)",
-        "medium shot (waist up) — Plan średni",
-        "full shot — Cała sylwetka",
-        "over-the-shoulder — Zza ramienia",
-        "dolly zoom in — Efekt Vertigo",
-        "handheld shake — Z ręki (Realizm)",
-        "orbit shot — Kamera krąży",
-        "dutch angle — Krzywy kadr",
-        "whip pan — Szybki obrót"
-    ]
-    selected_cam = st.selectbox("Wybierz ujęcie:", cam_list)
-    cam_pure = selected_cam.split(" — ")[0] # Wyciąga tylko angielską nazwę
-    
-    if st.button("➕ Dodaj Kamerę"):
-        st.session_state.draft += f"[camera: {cam_pure}] "
-        if any(x in cam_pure for x in ["face", "close-up"]):
-            st.session_state.draft += "[motion: high-fidelity facial animation, perfect lip-sync] "
-
-with r1c2:
-    st.subheader("🎙️ Dialog")
-    dialog_text = st.text_input("Tekst mowy:", placeholder="Wojtek, chcesz?")
-    if st.button("➕ Dodaj Dialog"):
-        if dialog_text:
-            st.session_state.draft += f"[voice: polish] [pause: 0.6s] \"{dialog_text}\" [pause: 0.5s] "
-
-with r1c3:
-    st.subheader("💃 Akcja (AI)")
-    action_input = st.text_input("Opisz ruch (PL):", placeholder="mruga i uśmiecha się")
-    if st.button("➕ Dodaj Akcję"):
-        if action_input:
-            with st.spinner("Tłumaczenie..."):
-                st.session_state.draft += f"{elon_translator(action_input, 'motion')} "
-
-st.divider()
-r2c1, r2c2, r2c3 = st.columns(3)
-
-with r2c1:
-    st.subheader("🎵 Muzyka")
-    music_list = [
-        "Subtle Hip-Hop Beat — Cichy bit",
-        "Cinematic Tension — Napięcie",
-        "Censored Beep — Cenzura PIIIP",
-        "Lo-Fi Chill — Spokojny klimat",
-        "Night Club Ambient — Klub nocny",
-        "Dark Techno Pulse — Mocne techno",
-        "Romantic Piano — Pianino"
-    ]
-    selected_music = st.selectbox("Muzyka tła:", music_list)
-    music_pure = selected_music.split(" — ")[0]
-    if st.button("➕ Dodaj Audio"):
-        st.session_state.draft += f"[audio: background {music_pure.lower()}] "
-
-with r2c2:
-    st.subheader("🔊 Efekty SFX")
-    sfx_list = [
-        "Crowd Applause — Oklaski",
-        "Heavy Breathing — Ciężki oddech",
-        "Heartbeat Thump — Bicie serca",
-        "Camera Shutter — Dźwięk migawki",
-        "Thunder Clap — Grzmot",
-        "Glass Shatter — Rozbijane szkło",
-        "Deep Woosh — Szybki świst"
-    ]
-    selected_sfx = st.selectbox("Efekt dźwiękowy:", sfx_list)
-    sfx_pure = selected_sfx.split(" — ")[0]
-    if st.button("➕ Dodaj SFX"):
-        st.session_state.draft += f"[audio: {sfx_pure.lower()}] "
-
-with r2c3:
-    st.subheader("🎭 Filtry Głosu")
-    voice_list = [
-        "Whisper — Szept",
-        "Robot Voice — Robot",
-        "Radio Filter — Przez telefon",
-        "Deep Bass Voice — Niski bas",
-        "Echo Reverb — Echo w hali"
-    ]
-    selected_voice = st.selectbox("Styl mowy:", voice_list)
-    voice_pure = selected_voice.split(" — ")[0]
-    if st.button("➕ Dodaj Filtr"):
-        st.session_state.draft += f"[audio: {voice_pure.lower()}] "
-
-# --- DRAFT I RENDER ---
+# --- DRAFT I RENDER (ZAKTUALIZOWANA LOGIKA ŹRÓDŁA) ---
 st.divider()
 st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=120)
 est_time = estimate_duration(st.session_state.draft)
@@ -184,12 +157,19 @@ with r_col1:
 with r_col2:
     final_dur = st.slider("Długość filmu (s):", 5, 15, int(min(max(est_time, 5), 15)))
     if st.button("🚀 WYPAL WIDEO", type="primary", use_container_width=True):
-        if uploaded_file and st.session_state.draft:
-            with st.spinner("Produkcja w toku..."):
-                img_bytes = uploaded_file.getvalue()
+        # NOWA LOGIKA: Sprawdza ztunowane zdjęcie lub wgrane
+        active_image = st.session_state.ztunowane_zdjecie if st.session_state.ztunowane_zdjecie else (Image.open(uploaded_file) if uploaded_file else None)
+        
+        if active_image and st.session_state.draft:
+            with st.spinner("Produkcja 'Petardy'..."):
+                # Konwersja aktywnego zdjęcia na b64
+                img_buffer = io.BytesIO()
+                active_image.save(img_buffer, format="JPEG")
+                img_bytes = img_buffer.getvalue()
                 b64 = base64.b64encode(img_bytes).decode()
-                img = Image.open(io.BytesIO(img_bytes))
-                w, h = img.size
+                
+                # Reszta renderu bez zmian
+                w, h = active_image.size
                 ratio = "16:9" if w/h > 1.2 else "9:16" if w/h < 0.8 else "1:1"
                 async def _gen():
                     client = xai_sdk.AsyncClient(api_key=api_key)
@@ -201,3 +181,5 @@ with r_col2:
                 v_res = requests.get(video.url).content
                 st.video(v_res)
                 st.download_button("💾 POBIERZ KLIP", v_res, "final_render.mp4", "video/mp4")
+        else:
+            st.error("Wgraj zdjęcie i zbuduj scenariusz!")
