@@ -9,7 +9,7 @@ import io
 import re
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION Director's Pro v4.1", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION Director's Pro v4.2", layout="wide", page_icon="🎬")
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -41,35 +41,39 @@ def elon_translator(text, context_type):
         return res.json()['choices'][0]['message']['content']
     except: return f"[{context_type}: error]"
 
-# --- POPRAWIONA FUNKCJA EDYCJI (Base64 JSON) ---
 def edit_image_xai(api_key, img_bytes, prompt):
-    """Edytuje obraz - Wersja Multipart (najbardziej stabilna)."""
+    """Edytuje obraz przy użyciu standardu Data URI (Base64)."""
     url = "https://api.x.ai/v1/images/edits"
-    
-    # WAŻNE: W multipart NIE ustawiamy Content-Type ręcznie, 
-    # biblioteka requests sama wygeneruje odpowiedni 'boundary'.
     headers = {
-        "Authorization": f"Bearer {api_key}"
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
     }
     
-    # Plik przesyłamy w słowniku 'files'
-    files = {
-        "image": ("image.jpg", img_bytes, "image/jpeg")
-    }
+    # Kodowanie obrazu do Base64 z nagłówkiem MIME
+    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+    data_uri = f"data:image/jpeg;base64,{img_b64}"
     
-    # Pozostałe dane (model, prompt) przesyłamy w 'data'
-    data = {
+    payload = {
         "model": "grok-imagine-image-pro",
+        "image": data_uri,
         "prompt": prompt
     }
     
-    res = requests.post(url, headers=headers, files=files, data=data)
-    
-    if res.status_code == 200:
-        return res.json()['data'][0]['url']
-    else:
-        # Debug błędu, żebyśmy widzieli co dokładnie mu nie pasuje
-        raise Exception(f"Błąd API {res.status_code}: {res.text}")
+    try:
+        res = requests.post(url, headers=headers, json=payload, timeout=60)
+        if res.status_code == 200:
+            return res.json()['data'][0]['url']
+        elif res.status_code == 502:
+            raise Exception("Serwer xAI jest przeciążony (502). Spróbuj ponownie za chwilę.")
+        else:
+            # Próba wyciągnięcia błędu z JSONa, jeśli istnieje
+            err_msg = res.text
+            try: err_msg = res.json().get('error', {}).get('message', res.text)
+            except: pass
+            raise Exception(f"Błąd API {res.status_code}: {err_msg}")
+    except requests.exceptions.Timeout:
+        raise Exception("Upłynął czas oczekiwania na odpowiedź serwera.")
+
 def estimate_duration(prompt):
     pauses = re.findall(r"\[pause:\s*(\d+\.?\d*)s\]", prompt)
     pause_time = sum(float(p) for p in pauses)
@@ -80,7 +84,7 @@ def estimate_duration(prompt):
     return round(pause_time + (words * 0.75) + audio_time + 3.0, 1)
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director's Pro v4.1")
+st.title("🎥 RAWMOTION Director's Pro v4.2")
 
 if "draft" not in st.session_state: st.session_state.draft = ""
 if "ztunowane_zdjecie" not in st.session_state: st.session_state.ztunowane_zdjecie = None
@@ -91,50 +95,59 @@ uploaded_file = st.file_uploader("🖼️ KROK 1: Wgraj zdjęcie źródłowe:", 
 # --- SIDEBAR: FX STUDIO ---
 with st.sidebar:
     st.header("👤 Postać")
-    char_desc_pl = st.text_area("Opis polski:", "Fotorealistyczna kobieta")
-    if st.button("➕ Wstaw Postać", use_container_width=True):
+    char_desc_pl = st.text_area("Opis fizyczny (PL):", "Fotorealistyczna kobieta")
+    if st.button("➕ Wstaw do Osi", use_container_width=True):
         with st.spinner("Tłumaczenie..."):
             st.session_state.draft += f"{elon_translator(char_desc_pl, 'character')} "
     
     st.divider()
     st.subheader("🆕 Tuning Zdjęcia (FX)")
-    tuning_mode = st.selectbox("Tryb:", ["Brak", "Stylizacja (Img2Img)", "Inpainting"])
+    tuning_mode = st.selectbox("Wybierz tryb:", ["Brak", "Stylizacja (Img2Img)", "Inpainting (Zmiana)"])
     
     if tuning_mode != "Brak" and uploaded_file:
-        tuning_prompt = st.text_input("Zmiana (PL):", placeholder="zmień strój na zieloną sukienkę")
-        if st.button("🛠️ Tunuj Zdjęcie", use_container_width=True):
-            with st.spinner("Pracuję nad obrazem..."):
+        tuning_prompt = st.text_input("Opisz zmianę (PL):", placeholder="zmień sukienkę na zieloną")
+        if st.button("🛠️ Wykonaj FX", use_container_width=True):
+            with st.spinner("Grok pracuje nad obrazem..."):
                 try:
-                    # 1. Tłumaczenie na techniczny angielski
+                    # Tłumaczenie promptu na techniczny angielski
                     translated = elon_translator(tuning_prompt, "action")
                     clean_p = re.sub(r"\[.*?\]", "", translated).strip()
-                    # 2. Wywołanie poprawionego API
+                    # Wywołanie poprawionego API FX
                     img_url = edit_image_xai(api_key, uploaded_file.getvalue(), clean_p)
-                    # 3. Zapisanie efektu
-                    st.session_state.ztunowane_zdjecie = Image.open(io.BytesIO(requests.get(img_url).content))
-                    st.success("Gotowe!")
+                    # Pobranie wyniku
+                    res_img = requests.get(img_url).content
+                    st.session_state.ztunowane_zdjecie = Image.open(io.BytesIO(res_img))
+                    st.success("Tuning zakończony!")
                 except Exception as e:
                     st.error(f"⚠️ {e}")
     
     st.divider()
     if st.session_state.ztunowane_zdjecie:
-        st.image(st.session_state.ztunowane_zdjecie, caption="Aktywne źródło AI", use_container_width=True)
-        if st.button("🗑️ Usuń tuning", use_container_width=True):
+        st.image(st.session_state.ztunowane_zdjecie, caption="Aktywne źródło FX", use_container_width=True)
+        if st.button("🗑️ Cofnij Tuning", use_container_width=True):
             st.session_state.ztunowane_zdjecie = None; st.rerun()
     elif uploaded_file:
         st.image(Image.open(uploaded_file), caption="Oryginał", use_container_width=True)
     
     st.divider()
-    if st.button("⏪ UNDO", use_container_width=True):
+    if st.button("⏪ UNDO (Cofnij krok)", use_container_width=True):
         st.session_state.draft = " ".join(st.session_state.draft.strip().split()[:-1]); st.rerun()
-    if st.button("🗑️ CZYŚĆ DRAFT", use_container_width=True):
+    if st.button("🗑️ CZYŚĆ SCENARIUSZ", type="secondary", use_container_width=True):
         st.session_state.draft = ""; st.rerun()
 
 # --- PANEL REŻYSERSKI 3x2 ---
 r1c1, r1c2, r1c3 = st.columns(3)
 with r1c1:
     st.subheader("🎥 Kamera")
-    cam_list = ["steady close-up on face — Twarz", "dynamic tilt down to hips — Biodra", "extreme close-up on lips — Usta", "medium shot (waist up) — Średni", "full shot — Cała", "dolly zoom in — Vertigo", "handheld shake — Drżenie"]
+    cam_list = [
+        "steady close-up on face — Portret", 
+        "dynamic tilt down to hips — Na biodra", 
+        "extreme close-up on lips — Makro usta", 
+        "medium shot (waist up) — Od pasa", 
+        "full shot — Cała sylwetka", 
+        "dolly zoom in — Efekt szoku", 
+        "handheld shake — Z ręki"
+    ]
     sel_cam = st.selectbox("Ujęcie:", cam_list)
     if st.button("➕ Dodaj Kamerę"):
         c_p = sel_cam.split(" — ")[0]
@@ -143,46 +156,58 @@ with r1c1:
 
 with r1c2:
     st.subheader("🎙️ Dialog")
-    txt = st.text_input("Mowa:")
-    if st.button("➕ Dodaj Mowę"):
+    txt = st.text_input("Co mówi postać:", placeholder="Wojtek, zobacz moją sukienkę!")
+    if st.button("➕ Dodaj Dialog"):
         if txt: st.session_state.draft += f"[voice: polish] [pause: 0.6s] \"{txt}\" [pause: 0.5s] "
 
 with r1c3:
-    st.subheader("💃 Akcja")
-    act = st.text_input("Ruch (PL):")
+    st.subheader("💃 Ruch")
+    act = st.text_input("Opisz akcję (PL):", placeholder="uśmiecha się zalotnie")
     if st.button("➕ Dodaj Ruch"):
-        if act: st.session_state.draft += f"{elon_translator(act, 'motion')} "
+        if act: 
+            with st.spinner("Tłumaczenie ruchu..."):
+                st.session_state.draft += f"{elon_translator(act, 'motion')} "
 
 st.divider()
 r2c1, r2c2, r2c3 = st.columns(3)
 with r2c1:
     st.subheader("🎵 Muzyka")
-    m_opt = st.selectbox("Muzyka:", ["Subtle Hip-Hop Beat", "Cinematic Tension", "Censored Beep", "Lo-Fi Chill"])
-    if st.button("➕ Audio"): st.session_state.draft += f"[audio: background {m_opt.lower()}] "
+    m_opt = st.selectbox("Podkład:", ["Subtle Hip-Hop Beat", "Cinematic Tension", "Censored Beep", "Lo-Fi Chill"])
+    if st.button("➕ Dodaj Muzykę"): st.session_state.draft += f"[audio: background {m_opt.lower()}] "
 with r2c2:
     st.subheader("🔊 SFX")
-    s_opt = st.selectbox("SFX:", ["Crowd Applause", "Heavy Breathing", "Heartbeat Thump", "Thunder Clap"])
-    if st.button("➕ SFX"): st.session_state.draft += f"[audio: {s_opt.lower()}] "
+    s_opt = st.selectbox("Efekt:", ["Crowd Applause", "Heavy Breathing", "Heartbeat Thump", "Thunder Clap"])
+    if st.button("➕ Dodaj SFX"): st.session_state.draft += f"[audio: {s_opt.lower()}] "
 with r2c3:
-    st.subheader("🎭 Filtry")
-    v_opt = st.selectbox("Styl:", ["Whisper", "Radio Filter", "Echo Reverb"])
-    if st.button("➕ Filtr"): st.session_state.draft += f"[audio: {v_opt.lower()}] "
+    st.subheader("🎭 Filtr")
+    v_opt = st.selectbox("Głos:", ["Whisper", "Radio Filter", "Echo Reverb"])
+    if st.button("➕ Dodaj Filtr"): st.session_state.draft += f"[audio: {v_opt.lower()}] "
 
-# --- RENDER ---
+# --- DRAFT I RENDER ---
 st.divider()
-st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU:", value=st.session_state.draft, height=120)
+st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=120)
 est = estimate_duration(st.session_state.draft)
-st.info(f"⏱️ Czas: {est}s | 💰 Koszt: ${round(est*0.05, 2)}")
+st.info(f"⏱️ Estymowany czas: {est}s | 💰 Koszt: ${round(est*0.05, 2)}")
 
-dur = st.slider("Długość (s):", 5, 15, int(min(max(est, 5), 15)))
-if st.button("🚀 WYPAL WIDEO", type="primary", use_container_width=True):
+dur = st.slider("Czas trwania filmu (s):", 5, 15, int(min(max(est, 5), 15)))
+if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=True):
+    # Wybór obrazu: najpierw FX, potem oryginał
     img = st.session_state.ztunowane_zdjecie if st.session_state.ztunowane_zdjecie else (Image.open(uploaded_file) if uploaded_file else None)
-    if img:
-        with st.spinner("Renderuję 'Petardę'..."):
+    
+    if img and st.session_state.draft:
+        with st.spinner("Produkcja 'Petardy' trwa..."):
             buf = io.BytesIO(); img.save(buf, format="JPEG"); b64 = base64.b64encode(buf.getvalue()).decode()
             async def _gen():
                 c = xai_sdk.AsyncClient(api_key=api_key)
-                return await c.video.generate(model="grok-imagine-video", image_url=f"data:image/jpeg;base64,{b64}", prompt=st.session_state.draft, duration=dur, aspect_ratio="1:1" if img.size[0]/img.size[1] < 1.1 else "16:9")
+                return await c.video.generate(
+                    model="grok-imagine-video", 
+                    image_url=f"data:image/jpeg;base64,{b64}", 
+                    prompt=st.session_state.draft, 
+                    duration=dur, 
+                    aspect_ratio="1:1" if img.size[0]/img.size[1] < 1.1 else "16:9"
+                )
             loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop); video = loop.run_until_complete(_gen())
             v_res = requests.get(video.url).content
-            st.video(v_res); st.download_button("💾 POBIERZ", v_res, "render.mp4", "video/mp4")
+            st.video(v_res); st.download_button("💾 POBIERZ KLIP", v_res, "render_v42.mp4", "video/mp4")
+    else:
+        st.error("⚠️ Wgraj zdjęcie i przygotuj scenariusz!")
