@@ -53,21 +53,27 @@ def estimate_duration(prompt):
     return round(pause_time + (words * 0.75) + audio_time + 3.0, 1)
 
 # --- ZMIANA: NOWA FUNKCJA EDYCJI OBRAZU (IMAGE EDITS) ---
-def edit_image_xai(api_key, img_bytes, prompt, mode="img2img"):
-    """Edytuje obraz przy użyciu Grok Imagine Edits (Pro)."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    async def _async_edit():
-        client = xai_sdk.AsyncClient(api_key=api_key)
-        # Używamy modelu Pro dla edycji
-        return await client.image.edit(
-            model="grok-imagine-image-pro",
-            image=img_bytes,
-            prompt=prompt,
-            safe_mode="standard"
-        )
-    try: return loop.run_until_complete(_async_edit())
-    finally: loop.close()
+def edit_image_xai(api_key, img_bytes, prompt):
+    """Edytuje obraz przy użyciu Grok Imagine Edits przez bezpośrednie API."""
+    url = "https://api.x.ai/v1/images/edits"
+    headers = {
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    # Przygotowanie pliku do wysyłki (multipart/form-data)
+    files = {
+        "image": ("image.jpg", img_bytes, "image/jpeg"),
+        "prompt": (None, prompt),
+        "model": (None, "grok-imagine-image-pro")
+    }
+    
+    res = requests.post(url, headers=headers, files=files)
+    
+    if res.status_code == 200:
+        # Zakładamy, że zwraca JSON z URL (standard w xAI)
+        return type('obj', (object,), {'url': res.json()['data'][0]['url']})
+    else:
+        raise Exception(f"Błąd API: {res.text}")
 
 # --- 3. INTERFACE ---
 st.title("🎥 RAWMOTION Director's Pro v4.0 (Studio FX)")
