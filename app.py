@@ -43,29 +43,29 @@ def elon_translator(text, context_type):
 
 # --- POPRAWIONA FUNKCJA EDYCJI (Base64 JSON) ---
 def edit_image_xai(api_key, img_bytes, prompt):
-    """Edytuje obraz przy użyciu Grok Imagine Edits przez Multipart/Form-Data."""
+    """Edytuje obraz - wersja 3: Czysty Base64 w JSON."""
     url = "https://api.x.ai/v1/images/edits"
     headers = {
-        "Authorization": f"Bearer {api_key}"
-        # WAŻNE: Nie ustawiamy Content-Type, requests zrobi to sam dla multipart
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
     }
     
-    files = {
-        "image": ("image.jpg", img_bytes, "image/jpeg")
-    }
+    # CZYSTY Base64 bez prefixu "data:image..."
+    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
     
-    data = {
+    payload = {
         "model": "grok-imagine-image-pro",
+        "image": img_b64, # Sama treść zakodowana
         "prompt": prompt
     }
     
-    res = requests.post(url, headers=headers, files=files, data=data)
+    res = requests.post(url, headers=headers, json=payload)
     
     if res.status_code == 200:
         return res.json()['data'][0]['url']
     else:
+        # Wyświetlamy co dokładnie boli serwer (debug)
         raise Exception(f"Błąd API {res.status_code}: {res.text}")
-
 def estimate_duration(prompt):
     pauses = re.findall(r"\[pause:\s*(\d+\.?\d*)s\]", prompt)
     pause_time = sum(float(p) for p in pauses)
