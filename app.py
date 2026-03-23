@@ -43,19 +43,24 @@ def elon_translator(text, context_type):
 
 # --- POPRAWIONA FUNKCJA EDYCJI (Base64 JSON) ---
 def edit_image_xai(api_key, img_bytes, prompt):
+    """Edytuje obraz przy użyciu Grok Imagine Edits przez Multipart/Form-Data."""
     url = "https://api.x.ai/v1/images/edits"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {api_key}"
+        # WAŻNE: Nie ustawiamy Content-Type, requests zrobi to sam dla multipart
+    }
     
-    # Konwersja zdjęcia do Base64
-    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+    files = {
+        "image": ("image.jpg", img_bytes, "image/jpeg")
+    }
     
-    payload = {
+    data = {
         "model": "grok-imagine-image-pro",
-        "image": f"data:image/jpeg;base64,{img_b64}",
         "prompt": prompt
     }
     
-    res = requests.post(url, headers=headers, json=payload)
+    res = requests.post(url, headers=headers, files=files, data=data)
+    
     if res.status_code == 200:
         return res.json()['data'][0]['url']
     else:
