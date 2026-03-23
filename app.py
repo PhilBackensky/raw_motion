@@ -10,8 +10,8 @@ import io
 # --- 1. KONFIGURACJA I ZABEZPIECZENIE ---
 st.set_page_config(page_title="RAWMOTION Ultra Studio", layout="wide", page_icon="🎥")
 
-# TUTAJ USTAW SWOJE HASŁO
-APP_PASSWORD = "Wojtek2026" 
+# Zamiast APP_PASSWORD = "Wojtek"
+APP_PASSWORD = st.secrets["MY_APP_PASSWORD"]
 
 def check_password():
     if "authenticated" not in st.session_state:
