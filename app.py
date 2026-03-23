@@ -23,27 +23,31 @@ def get_translated_prompt(polish_text, api_key):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
+    # Ta instrukcja wymusza na AI wyciąganie tekstu mówionego
+    system_instr = (
+        "You are a technical director for Memphis video engine. "
+        "CONVERT Polish input into a strict technical prompt. "
+        "STRICT RULES: "
+        "1. Identify any spoken text in Polish (even if not in quotes). "
+        "2. Place that Polish text EXACTLY inside [voice: polish] tags. "
+        "3. Describe movement with [motion] tags (e.g., [motion: woman speaks, smiling and winking]). "
+        "4. DO NOT ignore the actual words spoken. "
+        "5. Final output must be English technical description + Polish speech tags."
+    )
     payload = {
-        "model": "grok-4-1-fast-non-reasoning", # Używamy najszybszej wersji z Twojej listy
+        "model": "grok-4-1-fast-non-reasoning",
         "messages": [
-            {
-                "role": "system",
-                "content": "Jesteś ekspertem od promptingu wideo dla Memphis. Zamień polski opis na techniczny prompt po angielsku z tagami [motion], [audio], [camera]. Polskie dialogi zachowaj w tagach [voice: polish]."
-            },
+            {"role": "system", "content": system_instr},
             {"role": "user", "content": polish_text}
-        ]
+        ],
+        "temperature": 0.3 # Niższa temperatura tłumacza = większa dosłowność
     }
     
     response = requests.post(url, headers=headers, data=json.dumps(payload))
     if response.status_code == 200:
         return response.json()['choices'][0]['message']['content']
     else:
-        # Próba alternatywnej nazwy, jeśli fast nie wejdzie
-        payload["model"] = "grok-beta"
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content']
-        raise Exception(f"Błąd API: {response.status_code} - {response.text}")
+        return f"Błąd API: {response.status_code} - {response.text}"
 
 def get_video(api_key, img_b64, prompt, duration, temp):
     async def _async_call():
@@ -73,26 +77,27 @@ with st.sidebar:
     st.header("⚙️ Parametry")
     temp = st.slider("Temperatura (Odjechanie):", 0.0, 2.0, 1.0, 0.1)
     duration = st.slider("Długość (s):", 5, 15, 6)
+    st.info("Dla mowy trzymaj ok. 1.0 dla realizmu.")
 
 col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.subheader("1. Scenariusz")
-    polish_input = st.text_area("Opisz scenę po polsku:", placeholder="Np. Kobieta mówi: Wojtek, chcesz?...", height=100)
+    polish_input = st.text_area("Opisz scenę po polsku:", placeholder="Np. Kobieta mówi: Wojtek, chcesz? To masz! (i mruga okiem)", height=100)
     
     if st.button("🪄 Przygotuj techniczny prompt (AI)", use_container_width=True):
         if polish_input:
-            with st.spinner("Grok-4-Fast analizuje Twój opis..."):
+            with st.spinner("Grok-4-Fast składa scenariusz..."):
                 try:
                     translated = get_translated_prompt(polish_input, api_key)
                     st.session_state['final_prompt'] = translated
                 except Exception as e:
-                    st.error(f"⚠️ Błąd połączenia: {e}")
+                    st.error(f"⚠️ Błąd: {e}")
         else:
             st.warning("Wpisz opis!")
 
     final_prompt = st.text_area(
-        "Finalny Prompt (możesz edytować):", 
+        "Finalny Prompt (edytuj jeśli brakuje [voice]):", 
         value=st.session_state.get('final_prompt', ""), 
         height=180
     )
@@ -128,3 +133,5 @@ with col2:
                     st.error(f"⚠️ Błąd renderu: {str(e)}")
         else:
             st.error("Wgraj zdjęcie i przygotuj prompt!")
+
+st.markdown("---")
