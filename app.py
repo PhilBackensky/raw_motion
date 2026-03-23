@@ -9,7 +9,7 @@ import io
 import re
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION Director's Pro v4.2", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION Director's Pro v5", layout="wide", page_icon="🎬")
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -41,38 +41,22 @@ def elon_translator(text, context_type):
         return res.json()['choices'][0]['message']['content']
     except: return f"[{context_type}: error]"
 
-def edit_image_xai(api_key, img_bytes, prompt):
-    """Edytuje obraz przy użyciu standardu Data URI (Base64)."""
-    url = "https://api.x.ai/v1/images/edits"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    # Kodowanie obrazu do Base64 z nagłówkiem MIME
-    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-    data_uri = f"data:image/jpeg;base64,{img_b64}"
-    
-    payload = {
-        "model": "grok-imagine-image-pro",
-        "image": data_uri,
-        "prompt": prompt
-    }
-    
-    try:
-        res = requests.post(url, headers=headers, json=payload, timeout=60)
-        if res.status_code == 200:
-            return res.json()['data'][0]['url']
-        elif res.status_code == 502:
-            raise Exception("Serwer xAI jest przeciążony (502). Spróbuj ponownie za chwilę.")
-        else:
-            # Próba wyciągnięcia błędu z JSONa, jeśli istnieje
-            err_msg = res.text
-            try: err_msg = res.json().get('error', {}).get('message', res.text)
-            except: pass
-            raise Exception(f"Błąd API {res.status_code}: {err_msg}")
-    except requests.exceptions.Timeout:
-        raise Exception("Upłynął czas oczekiwania na odpowiedź serwera.")
+# --- NOWA FUNKCJA API: STABILNE GENEROWANIE OBRAZU ---
+def generate_image_xai(api_key, prompt, model_name="grok-imagine-image-pro"):
+    """Generuje nowy obraz przy użyciu Grok Imagine Pro."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    async def _async_gen():
+        client = xai_sdk.AsyncClient(api_key=api_key)
+        # Używamy wybranego modelu (standard lub pro)
+        return await client.image.generate(
+            model=model_name,
+            prompt=prompt,
+            aspect_ratio="1:1", # Najlepsze do twarzy wideo
+            safe_mode="standard"
+        )
+    try: return loop.run_until_complete(_async_gen())
+    finally: loop.close()
 
 def estimate_duration(prompt):
     pauses = re.findall(r"\[pause:\s*(\d+\.?\d*)s\]", prompt)
@@ -84,52 +68,59 @@ def estimate_duration(prompt):
     return round(pause_time + (words * 0.75) + audio_time + 3.0, 1)
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director's Pro v4.2")
+st.title("🎥 RAWMOTION Director's Pro v5.0 (Stabilne Studio FX)")
 
 if "draft" not in st.session_state: st.session_state.draft = ""
 if "ztunowane_zdjecie" not in st.session_state: st.session_state.ztunowane_zdjecie = None
 
 st.divider()
-uploaded_file = st.file_uploader("🖼️ KROK 1: Wgraj zdjęcie źródłowe:", type=['jpg','png','jpeg'])
+uploaded_file = st.file_uploader("🖼️ KROK 1: Wgraj zdjęcie źródłowe (lub wygeneruj w pasku bocznym):", type=['jpg','png','jpeg'])
 
-# --- SIDEBAR: FX STUDIO ---
+# --- SIDEBAR: FX STUDIO (ROZBUDOWANY O GENERATOR) ---
 with st.sidebar:
-    st.header("👤 Postać")
+    st.header("👤 Postać w Filmie")
     char_desc_pl = st.text_area("Opis fizyczny (PL):", "Fotorealistyczna kobieta")
     if st.button("➕ Wstaw do Osi", use_container_width=True):
         with st.spinner("Tłumaczenie..."):
             st.session_state.draft += f"{elon_translator(char_desc_pl, 'character')} "
     
     st.divider()
-    st.subheader("🆕 Tuning Zdjęcia (FX)")
-    tuning_mode = st.selectbox("Wybierz tryb:", ["Brak", "Stylizacja (Img2Img)", "Inpainting (Zmiana)"])
     
-    if tuning_mode != "Brak" and uploaded_file:
-        tuning_prompt = st.text_input("Opisz zmianę (PL):", placeholder="zmień sukienkę na zieloną")
-        if st.button("🛠️ Wykonaj FX", use_container_width=True):
-            with st.spinner("Grok pracuje nad obrazem..."):
+    # === NOWA SEKCJA: KREATOR POSTACI AI (Zamiast niedziałającego Tuningu) ===
+    st.subheader("🆕 Kreator Postaci (Grok Pro)")
+    image_prompt = st.text_area("Opisz nową postać (ang/pl - lepiej ang):", 
+                                placeholder="A close-up photograph of Ana de Armas in a tight GREEN dress, cinematic, photorealistic, 35mm")
+    
+    img_model_opt = st.selectbox("Wybierz model ($):", ["Standard ($0.02)", "Pro ($0.07)"])
+    img_model_pure = "grok-imagine-image" if "Standard" in img_model_opt else "grok-imagine-image-pro"
+    
+    if st.button("🚀 Generuj Nową Postać", use_container_width=True):
+        if image_prompt:
+            with st.spinner("Grok generuje postać..."):
                 try:
-                    # Tłumaczenie promptu na techniczny angielski
-                    translated = elon_translator(tuning_prompt, "action")
-                    clean_p = re.sub(r"\[.*?\]", "", translated).strip()
-                    # Wywołanie poprawionego API FX
-                    img_url = edit_image_xai(api_key, uploaded_file.getvalue(), clean_p)
-                    # Pobranie wyniku
-                    res_img = requests.get(img_url).content
-                    st.session_state.ztunowane_zdjecie = Image.open(io.BytesIO(res_img))
-                    st.success("Tuning zakończony!")
+                    # 1. Wywołanie STABILNEGO API generowania
+                    ai_res = generate_image_xai(api_key, image_prompt, img_model_pure)
+                    # 2. Pobranie i zapisanie obrazu
+                    img_data = requests.get(ai_res.url).content
+                    st.session_state.ztunowane_zdjecie = Image.open(io.BytesIO(img_data))
+                    st.success("Twarz wygenerowana!")
                 except Exception as e:
-                    st.error(f"⚠️ {e}")
-    
+                    st.error(f"⚠️ Błąd: {e}")
+        else:
+            st.error("Wpisz opis dla zdjęcia!")
+
     st.divider()
+    
+    # === WYŚWIETLANIE PODGLĄDU (WGGRANEGO LUB AI) ===
     if st.session_state.ztunowane_zdjecie:
-        st.image(st.session_state.ztunowane_zdjecie, caption="Aktywne źródło FX", use_container_width=True)
-        if st.button("🗑️ Cofnij Tuning", use_container_width=True):
+        st.image(st.session_state.ztunowane_zdjecie, caption="🆕 Aktywne źródło (AI Pro)", use_container_width=True)
+        if st.button("🗑️ Usuń zdjęcie AI", use_container_width=True):
             st.session_state.ztunowane_zdjecie = None; st.rerun()
     elif uploaded_file:
         st.image(Image.open(uploaded_file), caption="Oryginał", use_container_width=True)
     
     st.divider()
+    # Zarządzanie draftem
     if st.button("⏪ UNDO (Cofnij krok)", use_container_width=True):
         st.session_state.draft = " ".join(st.session_state.draft.strip().split()[:-1]); st.rerun()
     if st.button("🗑️ CZYŚĆ SCENARIUSZ", type="secondary", use_container_width=True):
@@ -191,7 +182,7 @@ st.info(f"⏱️ Estymowany czas: {est}s | 💰 Koszt: ${round(est*0.05, 2)}")
 
 dur = st.slider("Czas trwania filmu (s):", 5, 15, int(min(max(est, 5), 15)))
 if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=True):
-    # Wybór obrazu: najpierw FX, potem oryginał
+    # NOWA LOGIKA: Wybiera zdjęcie wygenerowane AI, potem wgrane
     img = st.session_state.ztunowane_zdjecie if st.session_state.ztunowane_zdjecie else (Image.open(uploaded_file) if uploaded_file else None)
     
     if img and st.session_state.draft:
@@ -199,6 +190,7 @@ if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=Tru
             buf = io.BytesIO(); img.save(buf, format="JPEG"); b64 = base64.b64encode(buf.getvalue()).decode()
             async def _gen():
                 c = xai_sdk.AsyncClient(api_key=api_key)
+                # Używamy najdroższego i najlepszego modelu wideo
                 return await c.video.generate(
                     model="grok-imagine-video", 
                     image_url=f"data:image/jpeg;base64,{b64}", 
@@ -208,6 +200,6 @@ if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=Tru
                 )
             loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop); video = loop.run_until_complete(_gen())
             v_res = requests.get(video.url).content
-            st.video(v_res); st.download_button("💾 POBIERZ KLIP", v_res, "render_v42.mp4", "video/mp4")
+            st.video(v_res); st.download_button("💾 POBIERZ KLIP", v_res, "render_v50.mp4", "video/mp4")
     else:
-        st.error("⚠️ Wgraj zdjęcie i przygotuj scenariusz!")
+        st.error("⚠️ Wgraj zdjęcie lub wygeneruj nową postać, a potem przygotuj scenariusz!")
