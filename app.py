@@ -18,18 +18,17 @@ except Exception:
 # --- FUNKCJE LOGICZNE ---
 
 def get_translated_prompt(polish_text, api_key):
-    # Używamy bezpośredniego zapytania API (REST), żeby ominąć błędy SDK
     url = "https://api.x.ai/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
     payload = {
-        "model": "grok-4-20-0309-non-reasoning", # Upewnij się, że ta nazwa jest identyczna jak w konsoli!
+        "model": "grok-4-1-fast-non-reasoning", # Używamy najszybszej wersji z Twojej listy
         "messages": [
             {
                 "role": "system",
-                "content": "You are a professional video prompting expert for Memphis (xAI). Convert Polish descriptions into technical English prompts with [motion], [audio], and [camera] tags. Keep Polish dialogue in [voice: polish] tags. Add 4k quality."
+                "content": "Jesteś ekspertem od promptingu wideo dla Memphis. Zamień polski opis na techniczny prompt po angielsku z tagami [motion], [audio], [camera]. Polskie dialogi zachowaj w tagach [voice: polish]."
             },
             {"role": "user", "content": polish_text}
         ]
@@ -39,12 +38,16 @@ def get_translated_prompt(polish_text, api_key):
     if response.status_code == 200:
         return response.json()['choices'][0]['message']['content']
     else:
-        raise Exception(f"Błąd API xAI: {response.status_code} - {response.text}")
+        # Próba alternatywnej nazwy, jeśli fast nie wejdzie
+        payload["model"] = "grok-beta"
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content']
+        raise Exception(f"Błąd API: {response.status_code} - {response.text}")
 
 def get_video(api_key, img_b64, prompt, duration, temp):
     async def _async_call():
         client = xai_sdk.AsyncClient(api_key=api_key)
-        # Model wideo zazwyczaj działa stabilnie w SDK, więc tu zostawiamy
         return await client.video.generate(
             model="grok-imagine-video",
             image_url=img_b64,
@@ -75,11 +78,11 @@ col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.subheader("1. Scenariusz")
-    polish_input = st.text_area("Opisz scenę po polsku:", placeholder="Np. Kobieta mówi: Wojtek...", height=100)
+    polish_input = st.text_area("Opisz scenę po polsku:", placeholder="Np. Kobieta mówi: Wojtek, chcesz?...", height=100)
     
     if st.button("🪄 Przygotuj techniczny prompt (AI)", use_container_width=True):
         if polish_input:
-            with st.spinner("Grok-4 analizuje Twój opis..."):
+            with st.spinner("Grok-4-Fast analizuje Twój opis..."):
                 try:
                     translated = get_translated_prompt(polish_input, api_key)
                     st.session_state['final_prompt'] = translated
