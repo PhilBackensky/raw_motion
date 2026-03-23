@@ -52,12 +52,12 @@ def get_translated_prompt(polish_text, api_key):
 def get_video(api_key, img_b64, prompt, duration, temp):
     async def _async_call():
         client = xai_sdk.AsyncClient(api_key=api_key)
+        # Usunęliśmy 'temperature', bo SDK go aktualnie nie rozpoznaje
         return await client.video.generate(
             model="grok-imagine-video",
             image_url=img_b64,
             prompt=prompt,
             duration=duration,
-            temperature=temp,
             aspect_ratio="16:9"
         )
     
