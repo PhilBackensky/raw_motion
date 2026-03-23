@@ -1,4 +1,4 @@
-streamlit
 xai-sdk
-python-dotenv
-Pillow==10.2.0
+Pillow
+requests
+streamlit
