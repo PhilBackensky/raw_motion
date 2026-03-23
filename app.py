@@ -96,10 +96,23 @@ with tab3:
         url = "https://api.x.ai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {
-            "model": "grok-4-1-fast-non-reasoning",
-            "messages": [{"role": "system", "content": "Jesteś reżyserem Memphis. Sklej podane dane w techniczny prompt z tagami [motion], [voice: polish], [camera]."}, 
-                         {"role": "user", "content": raw_story}]
-        }
+        "model": "grok-4-1-fast-non-reasoning",
+        "messages": [
+            {
+                "role": "system", 
+                "content": (
+                    "You are a professional technical director for Memphis video engine. "
+                    "STRICT RULES: 1. Spoken Polish text MUST be inside [voice: polish] tags. "
+                    "2. NEVER use closing tags like [/voice] or [/motion]. "
+                    "3. ALWAYS start prompts with: [motion: high-fidelity facial animation, perfect lip-sync]. "
+                    "4. Automatically insert [pause: 0.5s] at the start of speech and between sentences. "
+                    "5. Keep camera settings at the very beginning."
+                )
+            },
+            {"role": "user", "content": raw_story}
+        ],
+        "temperature": 0.3
+    }
         res = requests.post(url, headers=headers, json=payload)
         st.session_state["ultra_prompt"] = res.json()['choices'][0]['message']['content']
 
