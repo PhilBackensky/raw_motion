@@ -10,7 +10,7 @@ import re
 from datetime import timedelta
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION Director's Pro v5.3", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION Director's Pro v5.4", layout="wide", page_icon="🎬")
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -34,7 +34,7 @@ api_key = st.secrets["XAI_API_KEY"]
 def elon_translator(text, context_type):
     url = "https://api.x.ai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    tag_format = "[motion: ...]" if context_type in ["character", "motion"] else "[camera: ...]"
+    tag_format = "[character: ...]" if context_type == "character" else "[motion: ...]"
     prompt = f"Translate this Polish {context_type} description into ONE technical tag for Memphis engine using {tag_format}. Output ONLY the tag. Text: {text}"
     payload = {"model": "grok-4-1-fast-non-reasoning", "messages": [{"role": "user", "content": prompt}], "temperature": 0.2}
     try:
@@ -72,7 +72,7 @@ def estimate_duration(prompt):
     return round(pause_time + (words * 0.75) + audio_time + 3.0, 1)
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director's Pro v5.3 (HD & FX)")
+st.title("🎥 RAWMOTION Director's Pro v5.4")
 
 if "draft" not in st.session_state: st.session_state.draft = ""
 if "active_image" not in st.session_state: st.session_state.active_image = None
@@ -80,27 +80,25 @@ if "active_image" not in st.session_state: st.session_state.active_image = None
 st.divider()
 uploaded_file = st.file_uploader("🖼️ KROK 1: Wgraj zdjęcie źródłowe:", type=['jpg','png','jpeg'])
 
-# --- SIDEBAR: FX & SCENARIUSZ ---
+# --- SIDEBAR: ZARZĄDZANIE MATERIAŁEM ---
 with st.sidebar:
     st.header("👤 Zarządzanie Postacią")
     
-    st.subheader("✨ Nowa Postać AI")
-    gen_prompt = st.text_input("Opisz kogo stworzyć (ang/pl):")
-    if st.button("🚀 Generuj i Wstaw", use_container_width=True):
-        if gen_prompt:
-            with st.spinner("Tworzenie..."):
-                try:
-                    res = generate_image_xai(api_key, gen_prompt)
-                    st.session_state.active_image = Image.open(io.BytesIO(requests.get(res.url).content))
-                    st.session_state.draft += f"{elon_translator(gen_prompt, 'character')} [camera: medium shot] "
-                    st.success("Postać w osi!")
-                except Exception as e: st.error(f"Błąd: {e}")
+    # OPCJA A: WGRANE ZDJĘCIE (Najważniejsza)
+    if uploaded_file:
+        st.subheader("🖼️ Twoje Zdjęcie")
+        char_desc_pl = st.text_input("Opisz postać ze zdjęcia (PL):", "Fotorealistyczna kobieta")
+        if st.button("➕ Wstaw Opis do Osi", use_container_width=True):
+            with st.spinner("Tłumaczenie..."):
+                st.session_state.draft += f"{elon_translator(char_desc_pl, 'character')} "
+                st.success("Opis dodany!")
+        st.divider()
 
-    st.divider()
-    st.subheader("🛠️ Tuning FX")
+    # OPCJA B: TUNING FX (Jeśli jest co tunować)
     if uploaded_file or st.session_state.active_image:
-        edit_prompt = st.text_input("Co zmienić (np. green dress):")
-        if st.button("🪄 Wykonaj Tuning", use_container_width=True):
+        st.subheader("🛠️ Tuning FX (Edycja)")
+        edit_prompt = st.text_input("Co zmienić? (np. green dress):")
+        if st.button("🪄 Tunuj i Wstaw FX", use_container_width=True):
             with st.spinner("Edycja..."):
                 try:
                     source = uploaded_file.getvalue() if uploaded_file else None
@@ -108,25 +106,46 @@ with st.sidebar:
                         buf = io.BytesIO(); st.session_state.active_image.save(buf, format="PNG"); source = buf.getvalue()
                     res = edit_image_xai(api_key, source, edit_prompt)
                     st.session_state.active_image = Image.open(io.BytesIO(requests.get(res.url).content))
-                    st.session_state.draft += f"[motion: clothing change {edit_prompt}] "
-                    st.success("Tuning w osi!")
+                    st.session_state.draft += f"[motion: high-fidelity clothing change to {edit_prompt}] "
+                    st.success("Tuning gotowy!")
+                except Exception as e: st.error(f"Błąd: {e}")
+        st.divider()
+
+    # OPCJA C: GENERATOR (OD ZERA)
+    st.subheader("✨ Nowa Postać AI")
+    gen_prompt = st.text_input("Opisz kogo stworzyć:")
+    if st.button("🚀 Generuj i Wstaw AI", use_container_width=True):
+        if gen_prompt:
+            with st.spinner("Tworzenie..."):
+                try:
+                    res = generate_image_xai(api_key, gen_prompt)
+                    st.session_state.active_image = Image.open(io.BytesIO(requests.get(res.url).content))
+                    st.session_state.draft += f"{elon_translator(gen_prompt, 'character')} "
+                    st.success("Postać AI w osi!")
                 except Exception as e: st.error(f"Błąd: {e}")
 
     st.divider()
+    # Podgląd aktywnego materiału
     if st.session_state.active_image:
         st.image(st.session_state.active_image, caption="Aktywne źródło AI", use_container_width=True)
+        if st.button("🗑️ Resetuj źródło"): st.session_state.active_image = None; st.rerun()
     elif uploaded_file:
-        st.image(Image.open(uploaded_file), caption="Oryginał", use_container_width=True)
+        st.image(Image.open(uploaded_file), caption="Oryginał (Wgrany)", use_container_width=True)
 
-# --- PANEL REŻYSERSKI ---
+    st.divider()
+    if st.button("⏪ UNDO (Cofnij)", use_container_width=True):
+        st.session_state.draft = " ".join(st.session_state.draft.strip().split()[:-1]); st.rerun()
+    if st.button("🗑️ CZYŚĆ SCENARIUSZ", type="secondary", use_container_width=True):
+        st.session_state.draft = ""; st.rerun()
+
+# --- PANEL REŻYSERSKI (Bez zmian) ---
 r1c1, r1c2, r1c3 = st.columns(3)
 with r1c1:
     st.subheader("🎥 Kamera")
     cam_list = ["steady close-up on face — Portret", "dynamic tilt down to hips — Biodra", "full shot — Sylwetka", "dolly zoom in — Szok"]
     sel_cam = st.selectbox("Ujęcie:", cam_list)
     if st.button("➕ Dodaj Kamerę"):
-        c_p = sel_cam.split(" — ")[0]
-        st.session_state.draft += f"[camera: {c_p}] "
+        st.session_state.draft += f"[camera: {sel_cam.split(' — ')[0]}] "
 
 with r1c2:
     st.subheader("🎙️ Dialog")
@@ -140,21 +159,21 @@ with r1c3:
     if st.button("➕ Dodaj Ruch"):
         if act: st.session_state.draft += f"{elon_translator(act, 'motion')} "
 
-# --- RENDER (ZGODNIE Z DOKUMENTACJĄ ELONA) ---
+# --- RENDER HD ---
 st.divider()
 st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=120)
 est = estimate_duration(st.session_state.draft)
 
 col_a, col_b = st.columns(2)
 with col_a:
-    res_opt = st.selectbox("Rozdzielczość (HD):", ["720p", "480p"], index=0)
+    res_opt = st.selectbox("Rozdzielczość:", ["720p", "480p"], index=0)
 with col_b:
     dur = st.slider("Długość (s):", 5, 15, int(min(max(est, 5), 15)))
 
-if st.button("🚀 WYPAL FINALNE WIDEO (HD)", type="primary", use_container_width=True):
+if st.button("🚀 WYPAL WIDEO (HD)", type="primary", use_container_width=True):
     img = st.session_state.active_image if st.session_state.active_image else (Image.open(uploaded_file) if uploaded_file else None)
     if img:
-        with st.spinner(f"Renderowanie w {res_opt}... Może to zająć do 2 minut."):
+        with st.spinner(f"Renderowanie w {res_opt}..."):
             buf = io.BytesIO(); img.save(buf, format="JPEG"); b64 = base64.b64encode(buf.getvalue()).decode()
             async def _gen():
                 c = xai_sdk.AsyncClient(api_key=api_key)
@@ -163,16 +182,14 @@ if st.button("🚀 WYPAL FINALNE WIDEO (HD)", type="primary", use_container_widt
                     image_url=f"data:image/jpeg;base64,{b64}", 
                     prompt=st.session_state.draft, 
                     duration=dur,
-                    resolution=res_opt, # NOWOŚĆ Z DOKUMENTACJI
-                    timeout=timedelta(minutes=10), # NOWOŚĆ Z DOKUMENTACJI
-                    interval=timedelta(seconds=5)  # NOWOŚĆ Z DOKUMENTACJI
+                    resolution=res_opt,
+                    timeout=timedelta(minutes=10),
+                    interval=timedelta(seconds=5)
                 )
             try:
                 loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop); video = loop.run_until_complete(_gen())
-                if video.respect_moderation: # SPRAWDZENIE MODERACJI
+                if video.respect_moderation:
                     v_res = requests.get(video.url).content
-                    st.video(v_res); st.download_button("💾 POBIERZ KLIP", v_res, "render_v53.mp4", "video/mp4")
-                else:
-                    st.error("⚠️ Wideo zostało zablokowane przez filtry moderacji xAI.")
-            except Exception as e: st.error(f"Błąd renderowania: {e}")
-    else: st.error("⚠️ Brak zdjęcia źródłowego!")
+                    st.video(v_res); st.download_button("💾 POBIERZ", v_res, "render.mp4", "video/mp4")
+                else: st.error("⚠️ Zablokowane przez moderację.")
+            except Exception as e: st.error(f"Błąd: {e}")
