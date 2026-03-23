@@ -14,7 +14,7 @@ except Exception:
     st.error("❌ BŁĄD: Nie znaleziono klucza 'XAI_API_KEY' w Secrets!")
     st.stop()
 
-# --- FUNKCJE LOGICZNE (SYNCHRONICZNE WRAPPERY) ---
+# --- FUNKCJE LOGICZNE ---
 
 def get_translated_prompt(polish_text, api_key):
     async def _async_call():
@@ -22,10 +22,12 @@ def get_translated_prompt(polish_text, api_key):
         system_instr = (
             "You are a professional video prompting expert for Memphis (xAI). "
             "Convert the Polish description into a technical, cinematic English prompt. "
-            "Use tags: [motion], [audio], [camera]. Keep Polish dialogues in [voice_left/right] tags. "
-            "Add quality: 4k, realistic."
+            "IMPORTANT: If the user provides a dialogue in Polish, keep the exact Polish text "
+            "inside speech tags like [voice: polish] or [voice_left]. "
+            "Focus on [motion] and [audio] tags. Add quality keywords: 4k, photorealistic."
         )
-        response = await client.chat.completions.create(
+        # POPRAWKA: Usunięcie .chat. i użycie poprawnej metody SDK
+        response = await client.chat_completions.create(
             model="grok-4-20-0309-non-reasoning",
             messages=[
                 {"role": "system", "content": system_instr},
@@ -34,10 +36,12 @@ def get_translated_prompt(polish_text, api_key):
         )
         return response.choices[0].message.content
     
-    # Bezpieczne uruchomienie asynchroniczne wewnątrz Streamlita
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    return loop.run_until_complete(_async_call())
+    try:
+        return loop.run_until_complete(_async_call())
+    finally:
+        loop.close()
 
 def get_video(api_key, img_b64, prompt, duration, temp):
     async def _async_call():
@@ -53,7 +57,10 @@ def get_video(api_key, img_b64, prompt, duration, temp):
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    return loop.run_until_complete(_async_call())
+    try:
+        return loop.run_until_complete(_async_call())
+    finally:
+        loop.close()
 
 # --- INTERFEJS ---
 
@@ -62,14 +69,15 @@ st.markdown("---")
 
 with st.sidebar:
     st.header("⚙️ Parametry")
-    temp = st.slider("Temperatura:", 0.0, 2.0, 1.0, 0.1)
+    temp = st.slider("Temperatura (Odjechanie):", 0.0, 2.0, 1.0, 0.1)
     duration = st.slider("Długość (s):", 5, 15, 6)
+    st.info("Dla mowy zalecane: 1.0")
 
 col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.subheader("1. Scenariusz")
-    polish_input = st.text_area("Opisz scenę po polsku:", placeholder="Np. Chłopaki się śmieją...", height=100)
+    polish_input = st.text_area("Opisz scenę po polsku:", placeholder="Np. Kobieta mówi: Wojtek, chcesz?...", height=100)
     
     if st.button("🪄 Przygotuj techniczny prompt (AI)", use_container_width=True):
         if polish_input:
@@ -96,7 +104,7 @@ with col2:
     
     if st.button("🚀 WYPAL WIDEO", use_container_width=True, type="primary"):
         if uploaded_file and final_prompt:
-            with st.spinner("Trwa renderowanie... (ok. 90-120s)"):
+            with st.spinner("Trwa renderowanie w Memphis..."):
                 try:
                     img_bytes = uploaded_file.getvalue()
                     b64_img = base64.b64encode(img_bytes).decode('utf-8')
@@ -111,7 +119,7 @@ with col2:
                     st.download_button(
                         label="💾 POBIERZ PLIK MP4",
                         data=video_data,
-                        file_name="rawmotion_production.mp4",
+                        file_name="rawmotion_export.mp4",
                         mime="video/mp4",
                         use_container_width=True
                     )
