@@ -9,7 +9,7 @@ import io
 import re
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION Director's Pro", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION Director's Pro v3", layout="wide", page_icon="🎬")
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -48,12 +48,15 @@ def elon_translator(text, context_type):
 def estimate_duration(prompt):
     pauses = re.findall(r"\[pause:\s*(\d+\.?\d*)s\]", prompt)
     pause_time = sum(float(p) for p in pauses)
+    # Liczenie tagów audio (dodają czas)
+    audio_tags = re.findall(r"\[audio:\s*(.*?)\]", prompt)
+    audio_time = len(audio_tags) * 1.5 # +1.5s na każdy SFX
     clean_text = re.sub(r"\[.*?\]", "", prompt)
     words = len(clean_text.split())
-    return round(pause_time + (words * 0.75) + 2.5, 1)
+    return round(pause_time + (words * 0.7) + audio_time + 3.0, 1) # +3s na akcję/rozbieg
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director's Pro v2.5")
+st.title("🎥 RAWMOTION Director's Pro v3.0 (Hollywood & Audio Pack)")
 
 if "draft" not in st.session_state: st.session_state.draft = ""
 
@@ -61,7 +64,7 @@ if "draft" not in st.session_state: st.session_state.draft = ""
 with st.sidebar:
     st.header("👤 Definicja Postaci")
     char_input = st.text_area("Opisz postać po polsku:", "Fotorealistyczna kobieta ze zdjęcia, styl kinowy")
-    if st.button("➕ Przetłumacz i Wstaw Postać"):
+    if st.button("➕ Tłumacz i Wstaw Postać"):
         with st.spinner("Tłumaczenie postaci..."):
             tech_char = elon_translator(char_input, "character")
             st.session_state.draft += f"{tech_char} "
@@ -70,26 +73,31 @@ with st.sidebar:
         st.session_state.draft = ""; st.rerun()
 
 # --- GŁÓWNY PANEL ---
-col1, col2, col3 = st.columns(3)
+# Zmieniamy na 4 kolumny, żeby zmieścić Audio
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.subheader("🎥 Kamera")
+    st.subheader("🎥 Kamera (Hollywood)")
     cam_options = [
         "steady close-up on face", 
         "dynamic tilt down to hips", 
-        "handheld shake", 
-        "dolly zoom in", 
         "extreme close-up on eyes/lips",
-        "low angle shot (heroic)",
+        "medium shot (waist up)",
+        "full shot (entire body visible)",
+        "over-the-shoulder shot",
+        "dolly zoom in", 
+        "handheld shake", 
         "orbit shot (rotating around)",
-        "bird's eye view",
-        "pan left to right"
+        "dutch angle (tilt frame)",
+        "whip pan (fast camera movement)"
     ]
     cam_type = st.selectbox("Wybierz ujęcie:", cam_options)
     if st.button("➕ Dodaj Kamerę"):
         st.session_state.draft += f"[camera: {cam_type}] "
-        if "face" in cam_type or "close-up" in cam_type:
+        if any(x in cam_type for x in ["face", "close-up", "medium"]):
             st.session_state.draft += "[motion: high-fidelity facial animation, perfect lip-sync] "
+        if "medium" in cam_type or "full" in cam_type:
+            st.session_state.draft += "[motion: dynamic hip motion, confident body language] "
 
 with col2:
     st.subheader("🎙️ Dialog")
@@ -107,6 +115,34 @@ with col3:
                 tech_tag = elon_translator(action_text, "motion")
                 st.session_state.draft += f"{tech_tag} "
 
+# --- NOWA KOLUMNA: AUDIO SFX ---
+with col4:
+    st.subheader("🔊 Przybornik SFX")
+    
+    # Kategoria 1: Muzyka
+    music_opt = st.selectbox("🎵 Muzyka Tła:", ["Subtle Hip-Hop Beat", "Cinematic Tension", "Censored Beep", "Lo-Fi Chill Beat"])
+    if st.button("➕ Dodaj Muzykę"):
+        st.session_state.draft += f"[audio: background {music_opt.lower()}] "
+        
+    st.divider()
+    # Kategoria 2: SFX Otoczenia
+    ambient_opt = st.selectbox("🔊 Efekty SFX:", ["Crowd Applause", "Camera Shutter SFX", "Car Crash SFX", "Thunder Clap"])
+    if st.button("➕ Dodaj Ambient"):
+        st.session_state.draft += f"[audio: {ambient_opt.lower()}] "
+        
+    st.divider()
+    # Kategoria 3: Filtry Głosu
+    voice_fx_opt = st.selectbox("🎭 Filtry Głosu:", ["Whisper", "Radio/Phone Filter", "Echo/Reverb"])
+    if st.button("➕ Dodaj Filtr Głosu"):
+        st.session_state.draft += f"[audio: {voice_fx_opt.lower()}] "
+
+    st.divider()
+    # Kategoria 4: Własny Dźwięk
+    custom_audio = st.text_input("✍️ Własny SFX (np. otwieranie puszki):")
+    if st.button("➕ Dodaj Własny Dźwięk"):
+        if custom_audio:
+            st.session_state.draft += f"[audio: {custom_audio.lower()}] "
+
 # --- CZAS I DRAFT ---
 st.divider()
 st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=150)
@@ -122,7 +158,7 @@ with r_col1:
 with r_col2:
     if st.button("🚀 WYPAL WIDEO", type="primary", use_container_width=True):
         if uploaded_file and st.session_state.draft:
-            with st.spinner("Renderowanie 'Petardy'..."):
+            with st.spinner("Produkcja 'Petardy' w toku..."):
                 img_bytes = uploaded_file.getvalue()
                 b64 = base64.b64encode(img_bytes).decode()
                 img = Image.open(io.BytesIO(img_bytes))
@@ -140,4 +176,4 @@ with r_col2:
                 
                 v_res = requests.get(video.url).content
                 st.video(v_res)
-                st.download_button("💾 POBIERZ MP4", v_res, "render.mp4", "video/mp4")
+                st.download_button("💾 POBIERZ KLIP MP4", v_res, "render_v3.mp4", "video/mp4")
