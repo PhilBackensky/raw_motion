@@ -10,7 +10,7 @@ import re
 from datetime import timedelta
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION Director v7.0", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION Director v7.1", layout="wide", page_icon="🎬")
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -60,14 +60,14 @@ def edit_image_xai(api_key, img_bytes, prompt, model_name="grok-imagine-image-pr
     finally: loop.close()
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director v7.0 (The Final Studio)")
+st.title("🎥 RAWMOTION Director v7.1 (Duo & Budget)")
 
 if "draft" not in st.session_state: st.session_state.draft = ""
 if "active_ai_source" not in st.session_state: st.session_state.active_ai_source = None
 
 # --- SIDEBAR: CENTRUM DOWODZENIA ---
 with st.sidebar:
-    mode = st.radio("🎬 Tryb Obsady:", ["Solo (1 Osoba / AI)", "Duo (2 Osoby - Konfrontacja)"])
+    mode = st.radio("🎬 Tryb Obsady:", ["Solo (1 Osoba / AI)", "Duo (2 Osoby - Direct)"])
     st.divider()
 
     if mode == "Solo (1 Osoba / AI)":
@@ -77,7 +77,6 @@ with st.sidebar:
             char_desc = st.text_input("Opisz postać (PL):", "Fotorealistyczna kobieta")
             if st.button("➕ Wstaw [character]", use_container_width=True):
                 st.session_state.draft += f"{elon_translator(char_desc, 'character')} "
-        
         st.divider()
         st.subheader("✨ Generator AI")
         gen_p = st.text_input("Kogo stworzyć?")
@@ -86,7 +85,6 @@ with st.sidebar:
                 res = generate_image_xai(api_key, gen_p)
                 st.session_state.active_ai_source = Image.open(io.BytesIO(requests.get(res.url).content))
                 st.session_state.draft += f"{elon_translator(gen_p, 'character')} "
-        
         st.divider()
         st.subheader("🛠️ Tuning FX")
         if up_file or st.session_state.active_ai_source:
@@ -102,7 +100,7 @@ with st.sidebar:
 
     else: # TRYB DUO
         st.subheader("👥 Duo Direct")
-        up_a = st.file_uploader("Zdjęcie 1 (Osoba A):", type=['jpg','png','jpeg'])
+        up_a = st.file_uploader("Zdjęcie 1 (Osoba A - TŁO):", type=['jpg','png','jpeg'])
         up_b = st.file_uploader("Zdjęcie 2 (Osoba B):", type=['jpg','png','jpeg'])
         if up_a:
             if st.button("➕ Wstaw Postać A", use_container_width=True):
@@ -112,7 +110,7 @@ with st.sidebar:
                 st.session_state.draft += "[character: Person B from Image 2] "
 
     st.divider()
-    if st.button("⏪ UNDO (Cofnij)", use_container_width=True):
+    if st.button("⏪ UNDO", use_container_width=True):
         st.session_state.draft = " ".join(st.session_state.draft.strip().split()[:-1]); st.rerun()
     if st.button("🗑️ CZYŚĆ SCENARIUSZ", type="secondary", use_container_width=True):
         st.session_state.draft = ""; st.session_state.active_ai_source = None; st.rerun()
@@ -122,12 +120,12 @@ st.subheader("🖼️ Podgląd Materiału")
 col_img, col_ui = st.columns([1, 2])
 with col_img:
     if mode == "Solo (1 Osoba / AI)":
-        disp = st.session_state.active_ai_source if st.session_state.active_ai_source else (Image.open(up_file) if up_file else None)
+        disp = st.session_state.active_ai_source if st.session_state.active_ai_source else (Image.open(up_file) if "up_file" in locals() and up_file else None)
         if disp: st.image(disp, use_container_width=True)
     else:
         c1, c2 = st.columns(2)
         with c1: 
-            if up_a: st.image(Image.open(up_a), caption="A", use_container_width=True)
+            if up_a: st.image(Image.open(up_a), caption="A (Tło)", use_container_width=True)
         with c2: 
             if up_b: st.image(Image.open(up_b), caption="B", use_container_width=True)
 
@@ -135,9 +133,8 @@ with col_ui:
     r1c1, r1c2, r1c3 = st.columns(3)
     with r1c1:
         st.subheader("🎥 Kamera")
-        cam_list = ["steady close-up — Portret", "tilt down to hips — Biodra", "full shot — Sylwetka", "dolly zoom in — Szok", "orbit shot — Krążenie", "dutch angle — Krzywy", "handheld shake — Realizm"]
-        sel_cam = st.selectbox("Ujęcie:", cam_list)
-        if st.button("➕ Kamera"): st.session_state.draft += f"[camera: {sel_cam.split(' — ')[0]}] "
+        sel_cam = st.selectbox("Ujęcie:", ["steady close-up", "tilt down", "full shot", "dolly zoom", "orbit shot", "handheld shake"])
+        if st.button("➕ Kamera"): st.session_state.draft += f"[camera: {sel_cam}] "
     with r1c2:
         st.subheader("🎙️ Dialog")
         txt = st.text_input("Tekst mowy:")
@@ -164,18 +161,23 @@ with col_ui:
 # --- RENDER ---
 st.divider()
 st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=120)
-dur = st.slider("Długość (s):", 5, 15, 10)
 
-if st.button("🚀 WYPAL FINALNE WIDEO (HD)", type="primary", use_container_width=True):
-    with st.spinner("Produkcja trwa..."):
+col_q, col_d = st.columns(2)
+with col_q:
+    res_opt = st.selectbox("Jakość (💰):", ["480p", "720p"], index=0)
+with col_d:
+    dur = st.slider("Długość (s):", 5, 15, 10)
+
+if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=True):
+    with st.spinner(f"Renderowanie w {res_opt}..."):
         try:
             c = xai_sdk.AsyncClient(api_key=api_key)
             if mode == "Solo (1 Osoba / AI)":
                 buf = io.BytesIO(); disp.save(buf, format="JPEG"); b64 = base64.b64encode(buf.getvalue()).decode()
-                res = asyncio.run(c.video.generate(model="grok-imagine-video", image_url=f"data:image/jpeg;base64,{b64}", prompt=st.session_state.draft, duration=dur, resolution="720p"))
+                res = asyncio.run(c.video.generate(model="grok-imagine-video", image_url=f"data:image/jpeg;base64,{b64}", prompt=st.session_state.draft, duration=dur, resolution=res_opt))
             else:
                 b64_a = base64.b64encode(up_a.getvalue()).decode()
                 b64_b = base64.b64encode(up_b.getvalue()).decode()
-                res = asyncio.run(c.video.generate(model="grok-imagine-video", image_url=[f"data:image/jpeg;base64,{b64_a}", f"data:image/jpeg;base64,{b64_b}"], prompt=st.session_state.draft, duration=dur, resolution="720p"))
+                res = asyncio.run(c.video.generate(model="grok-imagine-video", image_url=[f"data:image/jpeg;base64,{b64_a}", f"data:image/jpeg;base64,{b64_b}"], prompt=st.session_state.draft, duration=dur, resolution=res_opt))
             st.video(requests.get(res.url).content)
         except Exception as e: st.error(f"Błąd: {e}")
