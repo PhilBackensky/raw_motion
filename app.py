@@ -10,7 +10,7 @@ import re
 from datetime import timedelta
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION Director v7.3", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION Director v7.4", layout="wide", page_icon="🎬")
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -50,7 +50,7 @@ def elon_translator(text, context_type):
         return f"[{context_type}: error]"
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director v7.3 (Force Sync)")
+st.title("🎥 RAWMOTION Director v7.4 (Engine Fix)")
 
 if "draft" not in st.session_state: st.session_state.draft = ""
 if "active_ai_source" not in st.session_state: st.session_state.active_ai_source = None
@@ -128,7 +128,7 @@ with col_ui:
         act = st.text_input("Akcja (PL):")
         if st.button("➕ Ruch"): st.session_state.draft += f"{elon_translator(act, 'motion')} "
 
-# --- RENDER (v7.3 Force Sync) ---
+# --- RENDER (v7.4 Engine Fix) ---
 st.divider()
 st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=150)
 
@@ -140,40 +140,49 @@ with col_d:
 
 if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=True):
     if not st.session_state.draft:
-        st.error("⚠️ Draft jest pusty!"); st.stop()
+        st.error("⚠️ Draft jest pusty! Wklej scenariusz."); st.stop()
         
     with st.spinner(f"Renderowanie {res_opt}..."):
         try:
-            # KLUCZOWA ZMIANA: Używamy synchronicznego klienta i manualnego sterowania pętlą
-            client = xai_sdk.Client(api_key=api_key)
-            
-            if mode == "Solo (1 Osoba / AI)":
-                if st.session_state.active_ai_source:
-                    buf = io.BytesIO(); st.session_state.active_ai_source.save(buf, format="JPEG"); img_data = buf.getvalue()
-                elif up_file: img_data = up_file.getvalue()
-                else: st.error("Brak zdjęcia!"); st.stop()
+            # FIX: Bezpieczne tworzenie pętli dla Streamlit
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            async def start_render():
+                c_async = xai_sdk.AsyncClient(api_key=api_key)
                 
-                b64 = base64.b64encode(img_data).decode()
-                res_video = client.video.generate(
-                    model="grok-imagine-video",
-                    image_url=f"data:image/jpeg;base64,{b64}",
-                    prompt=st.session_state.draft,
-                    duration=dur,
-                    resolution=res_opt
-                )
-            else: # DUO
-                if not (up_a and up_b): st.error("Wgraj oba zdjęcia!"); st.stop()
-                b64_a = base64.b64encode(up_a.getvalue()).decode()
-                b64_b = base64.b64encode(up_b.getvalue()).decode()
-                
-                res_video = client.video.generate(
-                    model="grok-imagine-video",
-                    image_url=[f"data:image/jpeg;base64,{b64_a}", f"data:image/jpeg;base64,{b64_b}"],
-                    prompt=st.session_state.draft,
-                    duration=dur,
-                    resolution=res_opt
-                )
-            
+                if mode == "Solo (1 Osoba / AI)":
+                    if st.session_state.active_ai_source:
+                        buf = io.BytesIO(); st.session_state.active_ai_source.save(buf, format="JPEG"); img_data = buf.getvalue()
+                    elif up_file: img_data = up_file.getvalue()
+                    else: st.error("Brak zdjęcia!"); st.stop()
+                    
+                    b64 = base64.b64encode(img_data).decode()
+                    return await c_async.video.generate(
+                        model="grok-imagine-video",
+                        image_url=f"data:image/jpeg;base64,{b64}",
+                        prompt=st.session_state.draft,
+                        duration=dur,
+                        resolution=res_opt
+                    )
+                else: # DUO
+                    if not (up_a and up_b): st.error("Wgraj oba zdjęcia!"); st.stop()
+                    b64_a = base64.b64encode(up_a.getvalue()).decode()
+                    b64_b = base64.b64encode(up_b.getvalue()).decode()
+                    
+                    # WERSJA ASYNCHRONICZNA OBSŁUGUJE LISTĘ ZDJĘĆ
+                    return await c_async.video.generate(
+                        model="grok-imagine-video",
+                        image_url=[f"data:image/jpeg;base64,{b64_a}", f"data:image/jpeg;base64,{b64_b}"],
+                        prompt=st.session_state.draft,
+                        duration=dur,
+                        resolution=res_opt
+                    )
+
+            res_video = loop.run_until_complete(start_render())
             st.video(requests.get(res_video.url).content)
             st.success("🎬 Akcja!")
             
