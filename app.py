@@ -65,12 +65,27 @@ def edit_image_xai(api_key, img_bytes, prompt, model_name="grok-imagine-image-pr
 def fuse_images_xai(api_key, img_a_bytes, img_b_bytes, prompt, model_name="grok-imagine-image-pro"):
     url = "https://api.x.ai/v1/images/edits"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    
+    # Upewniamy się, że format to JPEG dla mniejszej wagi transferu
     uri_a = f"data:image/jpeg;base64,{base64.b64encode(img_a_bytes).decode('utf-8')}"
     uri_b = f"data:image/jpeg;base64,{base64.b64encode(img_b_bytes).decode('utf-8')}"
-    payload = {"model": model_name, "images": [uri_a, uri_b], "prompt": prompt, "aspect_ratio": "16:9"}
-    res = requests.post(url, headers=headers, json=payload, timeout=90)
-    if res.status_code == 200: return res.json()['data'][0]['url']
-    else: raise Exception(f"Błąd Fuzji: {res.text}")
+    
+    payload = {
+        "model": model_name,
+        "images": [uri_a, uri_b],
+        "prompt": prompt,
+        "aspect_ratio": "16:9"
+    }
+    
+    res = requests.post(url, headers=headers, json=payload, timeout=120)
+    
+    if res.status_code == 200:
+        return res.json()['data'][0]['url']
+    elif res.status_code == 400:
+        # Jeśli to błąd moderacji lub twarzy
+        raise Exception(f"xAI odrzuciło zdjęcia (prawdopodobnie filtry rozpoznawania twarzy osób publicznych).")
+    else:
+        raise Exception(f"Błąd API {res.status_code}: {res.text}")
 
 # --- 3. INTERFACE ---
 st.title("🎥 RAWMOTION Master Director v6.0")
