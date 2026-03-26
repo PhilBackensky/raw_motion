@@ -8,7 +8,7 @@ from PIL import Image
 from datetime import timedelta
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION v8.1", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION v8.2", layout="wide", page_icon="🎬")
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -36,10 +36,10 @@ def elon_translator(text, context_type):
     except: return f"[{context_type}: error]"
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director v8.1 (Interactions)")
+st.title("🎥 RAWMOTION Director v8.2 (Stable Studio)")
 if "draft" not in st.session_state: st.session_state.draft = ""
 
-# --- SIDEBAR: ZARZĄDZANIE ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Studio Setup")
     mode = st.radio("Tryb:", ["Solo / Edit", "Duo / Interactions", "Trio / Selfie"])
@@ -56,6 +56,7 @@ with st.sidebar:
 # --- PANEL REŻYSERSKI 3x2 ---
 st.subheader("🖼️ Panel Kontrolny")
 col_img, col_ui = st.columns([1, 2])
+
 with col_img:
     c1, c2 = st.columns(2)
     with c1: 
@@ -65,43 +66,45 @@ with col_img:
     if up_3: st.image(up_3, caption="IMAGE_3", use_container_width=True)
 
 with col_ui:
-    r1, r2 = st.rows(2) # Wizualny podział na 6 sekcji
-    
     # Rząd 1
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.write("🎥 **Kamera**")
-        cam = st.selectbox("Ujęcie:", ["steady close-up", "orbit 360", "handheld shake", "whip pan", "dolly zoom"])
-        if st.button("➕ Kamera"): st.session_state.draft += f"[camera: {cam}] "
-    with c2:
-        st.write("🎙️ **Dialog**")
-        txt = st.text_input("Tekst:")
-        who = st.selectbox("Mówi:", ["Osoba 1", "Osoba 2", "Osoba 3"])
-        if st.button("➕ Dialog"):
-            tag = who[-1]
-            st.session_state.draft += f"[voice: polish person {tag}] \"{txt}\" [pause: 0.5s] "
-    with c3:
-        st.write("🕺 **Interakcja**")
-        inter = st.selectbox("Akcja:", ["patrzą na siebie", "obejmują się", "kłócą się", "dziubek do selfie"])
-        if st.button("➕ Interakcja"):
-            st.session_state.draft += f"[motion: high-fidelity facial interaction between characters, {inter}] "
+    with st.container():
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.write("🎥 **Kamera**")
+            cam = st.selectbox("Ujęcie:", ["steady close-up", "orbit 360", "handheld shake", "whip pan", "dolly zoom"])
+            if st.button("➕ Kamera"): st.session_state.draft += f"[camera: {cam}] "
+        with c2:
+            st.write("🎙️ **Dialog**")
+            txt = st.text_input("Tekst:")
+            who = st.selectbox("Mówi:", ["Osoba 1", "Osoba 2", "Osoba 3"])
+            if st.button("➕ Dialog"):
+                tag = who[-1]
+                st.session_state.draft += f"[voice: polish person {tag}] \"{txt}\" [pause: 0.5s] "
+        with c3:
+            st.write("🕺 **Interakcja**")
+            inter = st.selectbox("Akcja:", ["patrzą na siebie", "obejmują się", "kłócą się", "dziubek do selfie"])
+            if st.button("➕ Interakcja"):
+                st.session_state.draft += f"[motion: high-fidelity facial interaction between characters, {inter}] "
+
+    st.write("") # Odstęp
 
     # Rząd 2
-    c4, c5, c6 = st.columns(3)
-    with c4:
-        st.write("🎵 **Muzyka**")
-        mus = st.selectbox("Styl:", ["Cinematic", "Hip-Hop", "Techno", "Romantic"])
-        if st.button("➕ Audio"): st.session_state.draft += f"[audio: background {mus.lower()}] "
-    with c5:
-        st.write("🔊 **SFX**")
-        sfx = st.selectbox("Efekt:", ["Applause", "Laughter", "Thunder", "Scream"])
-        if st.button("➕ SFX"): st.session_state.draft += f"[audio: {sfx.lower()}] "
-    with c6:
-        st.write("🎭 **Filtry**")
-        fil = st.selectbox("Filtr:", ["Whisper", "Radio", "Echo", "Robot"])
-        if st.button("➕ Filtr"): st.session_state.draft += f"[audio: {fil.lower()}] "
+    with st.container():
+        c4, c5, c6 = st.columns(3)
+        with c4:
+            st.write("🎵 **Muzyka**")
+            mus = st.selectbox("Styl:", ["Cinematic", "Hip-Hop", "Techno", "Romantic"])
+            if st.button("➕ Audio"): st.session_state.draft += f"[audio: background {mus.lower()}] "
+        with c5:
+            st.write("🔊 **SFX**")
+            sfx = st.selectbox("Efekt:", ["Applause", "Laughter", "Thunder", "Scream"])
+            if st.button("➕ SFX"): st.session_state.draft += f"[audio: {sfx.lower()}] "
+        with c6:
+            st.write("🎭 **Filtry**")
+            fil = st.selectbox("Filtr:", ["Whisper", "Radio", "Echo", "Robot"])
+            if st.button("➕ Filtr"): st.session_state.draft += f"[audio: {fil.lower()}] "
 
-# --- RENDER (The interaction Fix) ---
+# --- RENDER ---
 st.divider()
 st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=120)
 
@@ -116,12 +119,10 @@ if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=Tru
             loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
             client = xai_sdk.AsyncClient(api_key=api_key)
             
-            # Przygotowanie listy referencyjnej zgodnie z doku
             refs = [f"data:image/jpeg;base64,{base64.b64encode(up_1.getvalue()).decode()}"]
             if up_2: refs.append(f"data:image/jpeg;base64,{base64.b64encode(up_2.getvalue()).decode()}")
             if up_3: refs.append(f"data:image/jpeg;base64,{base64.b64encode(up_3.getvalue()).decode()}")
             
-            # FINALNY PROMPT (dodajemy definicję ról na początku automatycznie)
             prefix = "[character: <IMAGE_1> is person 1"
             if up_2: prefix += ", <IMAGE_2> is person 2"
             if up_3: prefix += ", <IMAGE_3> is person 3"
@@ -141,5 +142,5 @@ if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=Tru
 
             v_res = loop.run_until_complete(render())
             st.video(requests.get(v_res.url).content)
-            st.success("✅ Sukces! Interakcja została wypalona.")
+            st.success("✅ Sukces!")
         except Exception as e: st.error(f"🔴 Błąd: {str(e)}")
