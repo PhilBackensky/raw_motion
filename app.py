@@ -7,8 +7,8 @@ import io
 from PIL import Image
 from datetime import timedelta
 
-# --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION v8.2", layout="wide", page_icon="🎬")
+# --- 1. CONFIG & SECURITY (v8.3) ---
+st.set_page_config(page_title="RAWMOTION v8.3", layout="wide", page_icon="🎬")
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -36,7 +36,7 @@ def elon_translator(text, context_type):
     except: return f"[{context_type}: error]"
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director v8.2 (Stable Studio)")
+st.title("🎥 RAWMOTION Director v8.3 (Stereo Fix)")
 if "draft" not in st.session_state: st.session_state.draft = ""
 
 # --- SIDEBAR ---
@@ -45,9 +45,9 @@ with st.sidebar:
     mode = st.radio("Tryb:", ["Solo / Edit", "Duo / Interactions", "Trio / Selfie"])
     st.divider()
     
-    up_1 = st.file_uploader("Zdjęcie 1 (<IMAGE_1>):", type=['jpg','png','jpeg'])
-    up_2 = st.file_uploader("Zdjęcie 2 (<IMAGE_2>):", type=['jpg','png','jpeg']) if "Duo" in mode or "Trio" in mode else None
-    up_3 = st.file_uploader("Zdjęcie 3 (<IMAGE_3>):", type=['jpg','png','jpeg']) if "Trio" in mode else None
+    up_1 = st.file_uploader("Osoba 1 (<IMAGE_1>):", type=['jpg','png','jpeg'])
+    up_2 = st.file_uploader("Osoba 2 (<IMAGE_2>):", type=['jpg','png','jpeg']) if "Duo" in mode or "Trio" in mode else None
+    up_3 = st.file_uploader("Osoba 3 (<IMAGE_3>):", type=['jpg','png','jpeg']) if "Trio" in mode else None
 
     if st.button("✨ Resetuj Draft"): st.session_state.draft = ""; st.rerun()
     if st.button("⏪ Undo"): 
@@ -60,9 +60,9 @@ col_img, col_ui = st.columns([1, 2])
 with col_img:
     c1, c2 = st.columns(2)
     with c1: 
-        if up_1: st.image(up_1, caption="IMAGE_1", use_container_width=True)
+        if up_1: st.image(up_1, caption="IMAGE_1 (Lewa)", use_container_width=True)
     with c2: 
-        if up_2: st.image(up_2, caption="IMAGE_2", use_container_width=True)
+        if up_2: st.image(up_2, caption="IMAGE_2 (Prawa)", use_container_width=True)
     if up_3: st.image(up_3, caption="IMAGE_3", use_container_width=True)
 
 with col_ui:
@@ -74,12 +74,14 @@ with col_ui:
             cam = st.selectbox("Ujęcie:", ["steady close-up", "orbit 360", "handheld shake", "whip pan", "dolly zoom"])
             if st.button("➕ Kamera"): st.session_state.draft += f"[camera: {cam}] "
         with c2:
-            st.write("🎙️ **Dialog**")
+            st.write("🎙️ **Stereo Dialog (v8.3)**")
             txt = st.text_input("Tekst:")
-            who = st.selectbox("Mówi:", ["Osoba 1", "Osoba 2", "Osoba 3"])
+            who = st.selectbox("Mówi:", ["Osoba 1 (Lewa)", "Osoba 2 (Prawa)", "Osoba 3"])
             if st.button("➕ Dialog"):
                 tag = who[-1]
-                st.session_state.draft += f"[voice: polish person {tag}] \"{txt}\" [pause: 0.5s] "
+                pos = "left" if tag == "1" else "right"
+                # Dodajemy ścisłe Audio Panning do tagu [voice]
+                st.session_state.draft += f"[voice: polish person {tag} on the {pos}] \"{txt}\" [pause: 1.0s] "
         with c3:
             st.write("🕺 **Interakcja**")
             inter = st.selectbox("Akcja:", ["patrzą na siebie", "obejmują się", "kłócą się", "dziubek do selfie"])
@@ -109,12 +111,12 @@ st.divider()
 st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=120)
 
 col_q, col_d = st.columns(2)
-with col_q: res = st.selectbox("Jakość:", ["480p", "720p"])
+with col_q: res = st.selectbox("Jakość:", ["480p", "720p"], index=1) # Domyślnie 720p
 with col_d: dur = st.slider("Długość (s):", 5, 10, 10)
 
 if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=True):
     if not up_1: st.error("Wgraj zdjęcie!"); st.stop()
-    with st.spinner("Synchronizacja postaci i renderowanie..."):
+    with st.spinner("Synchronizacja Stereo Logic i renderowanie..."):
         try:
             loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
             client = xai_sdk.AsyncClient(api_key=api_key)
@@ -123,8 +125,9 @@ if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=Tru
             if up_2: refs.append(f"data:image/jpeg;base64,{base64.b64encode(up_2.getvalue()).decode()}")
             if up_3: refs.append(f"data:image/jpeg;base64,{base64.b64encode(up_3.getvalue()).decode()}")
             
-            prefix = "[character: <IMAGE_1> is person 1"
-            if up_2: prefix += ", <IMAGE_2> is person 2"
+            # NOWY PREFIX V8.3 (Ścisłe pozycjonowanie przestrzenne)
+            prefix = "[character: <IMAGE_1> is person 1 on the left"
+            if up_2: prefix += ", <IMAGE_2> is person 2 on the right"
             if up_3: prefix += ", <IMAGE_3> is person 3"
             prefix += "]. "
             
@@ -142,5 +145,5 @@ if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=Tru
 
             v_res = loop.run_until_complete(render())
             st.video(requests.get(v_res.url).content)
-            st.success("✅ Sukces!")
+            st.success("✅ Stereo Sync wypalony pomyślnie!")
         except Exception as e: st.error(f"🔴 Błąd: {str(e)}")
