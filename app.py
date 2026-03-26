@@ -6,7 +6,7 @@ import requests
 from datetime import timedelta
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION v8.9", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION v8.10", layout="wide", page_icon="🎬")
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -18,33 +18,40 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True; st.rerun()
         else: st.error("Błędne hasło."); st.stop()
 
-# --- 2. CORE ENGINE & TRANSLATOR ---
+# --- 2. CORE ENGINE & UPDATED TRANSLATOR (v8.10) ---
 api_key = st.secrets["XAI_API_KEY"]
 
 def elon_translator(text, context_type, subject=""):
     url = "https://api.x.ai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
+    # Kategoria instrukcji: ZAKAZ KOMPRESJI DETALI
+    if context_type == "edit" or context_type == "targeted_motion":
+        # Wymuszamy na Groku zachowanie detali ubioru i przymiotników.
+        system_instruction = "Translate the Polish text to English technical tag 1:1. CRITICAL: DO NOT COMPRESS. Preserved all clothing details, adjectives, and colors. Output ONLY the technical tag."
+    else:
+        system_instruction = "Translate the Polish text to English technical tag for Memphis engine. Output ONLY the technical tag."
+
     templates = {
-        "targeted_motion": f"[motion: {subject} is ..., high-fidelity interaction]",
+        "targeted_motion": f"[motion: {subject} is ..., high-fidelity interaction]", 
         "scene": "[scene: ..., cinematic environmental lighting]",
         "edit": "[clothing_edit: ..., preserving original pose 1:1]"
     }
     
     template = templates.get(context_type, "[...] ")
-    prompt = f"Translate to technical tag for Memphis engine using format: {template}. Output ONLY resulting tag. Text: {text}"
+    full_prompt = f"{system_instruction} Using this format template: {template}. Polish Text: {text}"
     
     try:
         res = requests.post(url, headers=headers, json={
             "model": "grok-4-1-fast-non-reasoning", 
-            "messages": [{"role": "user", "content": prompt}], 
+            "messages": [{"role": "user", "content": full_prompt}], 
             "temperature": 0.1
         })
         return res.json()['choices'][0]['message']['content']
-    except: return f"[{context_type}: error]"
+    except: return f"[{context_type}: translation error]"
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director v8.9")
+st.title("🎥 RAWMOTION Director v8.10 (Details)")
 if "draft" not in st.session_state: st.session_state.draft = ""
 
 # SIDEBAR
@@ -85,10 +92,6 @@ with c_tools:
                 "orbit 360": "Pełny obrót",
                 "handheld shake": "Z ręki (dynamiczne)",
                 "dolly zoom": "Najazd (Vertigo effect)",
-                "low angle hero": "Z dołu (heroiczne)",
-                "drone sweep": "Z góry (panoramiczne)",
-                "whip pan": "Szybki przeskok",
-                "slow motion zoom": "Powolny najazd",
                 "static selfie": "Styl selfie"
             }
             cam_key = st.selectbox("Wybierz ujęcie:", list(cam_list.keys()), format_func=lambda x: f"{x} - {cam_list[x]}")
@@ -103,14 +106,14 @@ with c_tools:
             if st.button("➕ Głos"):
                 p_id = who.split()[1]
                 pos = "left" if p_id == "1" else "right"
-                # POWRÓT DO 1.0s DLA EFEKTYWNOŚCI
                 st.session_state.draft += f"[voice: polish person {p_id} on the {pos}] \"{txt}\" [pause: 1.0s]\n"
         
         with r1_c3:
             st.write("🕺 **Akcja Postaci**")
-            subj = st.selectbox("Kto:", ["person 1", "person 2", "both together"])
-            act_pl = st.text_input("Ruch (np. macha ręką):")
-            if st.button("➕ Akcja"):
+            subj = st.selectbox("Kto:", ["both together", "person 1", "person 2"])
+            act_pl = st.text_input("Ruch i Ubiór (PL):", placeholder="np. stoją w skąpym bikini")
+            if st.button("➕ Akcja (v8.10 Fix)"):
+                # Nowa logika tłumaczenia zachowująca detale
                 st.session_state.draft += elon_translator(act_pl, "targeted_motion", subj) + "\n"
 
         st.divider()
@@ -118,17 +121,17 @@ with c_tools:
         r2_c1, r2_c2, r2_c3 = st.columns(3)
         with r2_c1:
             st.write("🌍 **Tło i Scena**")
-            env = st.text_input("Gdzie są? (np. góry):")
+            env = st.text_input("Gdzie są? (np. plaża):")
             if st.button("➕ Scena"):
                 st.session_state.draft += elon_translator(env, "scene") + "\n"
         with r2_c2:
             st.write("🎵 **Muzyka Tła**")
-            bg_mus = st.selectbox("Styl:", ["None", "Cinematic Pop", "Romantic Piano", "Summer Chill", "Dark Tension", "Epic Orchestral"])
+            bg_mus = st.selectbox("Styl:", ["None", "Cinematic Pop", "Romantic Piano", "Summer Chill", "Epic Orchestral"])
             if st.button("➕ Muzyka"):
                 st.session_state.draft += f"[audio: background {bg_mus.lower()}]\n"
         with r2_c3:
             st.write("🔊 **Efekty SFX**")
-            sfx = st.selectbox("SFX:", ["Laughter", "Applause", "Birds", "Beach waves", "City noise", "Heartbeat"])
+            sfx = st.selectbox("SFX:", ["Laughter", "Applause", "Birds", "Beach waves"])
             if st.button("➕ SFX"):
                 st.session_state.draft += f"[audio: {sfx.lower()}]\n"
 
