@@ -7,24 +7,21 @@ import io
 from PIL import Image
 from datetime import timedelta
 
-# --- 1. KONFIGURACJA I BEZPIECZEŃSTWO ---
-st.set_page_config(page_title="RAWMOTION Trio v8.0", layout="wide", page_icon="🎬")
+# --- 1. CONFIG & SECURITY ---
+st.set_page_config(page_title="RAWMOTION v8.1", layout="wide", page_icon="🎬")
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    st.title("🔐 Director's Entrance")
     pwd = st.text_input("Hasło wejścia:", type="password")
     if st.button("Wejdź"):
         if pwd == st.secrets["MY_APP_PASSWORD"]:
-            st.session_state["authenticated"] = True
-            st.rerun()
-        else:
-            st.error("Błędne hasło.")
+            st.session_state["authenticated"] = True; st.rerun()
+        else: st.error("Błędne hasło.")
     st.stop()
 
-# --- 2. LOGIKA TRANSLACJI ---
+# --- 2. LOGIC ---
 api_key = st.secrets["XAI_API_KEY"]
 
 def elon_translator(text, context_type):
@@ -36,107 +33,113 @@ def elon_translator(text, context_type):
     try:
         res = requests.post(url, headers=headers, json=payload)
         return res.json()['choices'][0]['message']['content']
-    except:
-        return f"[{context_type}: error]"
+    except: return f"[{context_type}: error]"
 
-# --- 3. INTERFEJS UŻYTKOWNIKA ---
-st.title("🎥 RAWMOTION Director v8.0 (Trio & Selfie Mode)")
-if "draft" not in st.session_state:
-    st.session_state.draft = ""
+# --- 3. INTERFACE ---
+st.title("🎥 RAWMOTION Director v8.1 (Interactions)")
+if "draft" not in st.session_state: st.session_state.draft = ""
 
-# --- SIDEBAR: OBSADA ---
+# --- SIDEBAR: ZARZĄDZANIE ---
 with st.sidebar:
-    st.header("👥 Obsada (Trio)")
-    up_1 = st.file_uploader("RAFAŁ (<IMAGE_1>):", type=['jpg','png','jpeg'])
-    up_2 = st.file_uploader("DZIEWCZYNA 1 (<IMAGE_2>):", type=['jpg','png','jpeg'])
-    up_3 = st.file_uploader("DZIEWCZYNA 2 (<IMAGE_3>):", type=['jpg','png','jpeg'])
-    
+    st.header("⚙️ Studio Setup")
+    mode = st.radio("Tryb:", ["Solo / Edit", "Duo / Interactions", "Trio / Selfie"])
     st.divider()
-    if st.button("➕ Dodaj Rafała do sceny"):
-        st.session_state.draft += "The person from <IMAGE_1> "
-    if st.button("➕ Dodaj Dziewczynę 1"):
-        st.session_state.draft += "The person from <IMAGE_2> "
-    if st.button("➕ Dodaj Dziewczynę 2"):
-        st.session_state.draft += "The person from <IMAGE_3> "
     
-    st.divider()
-    if st.button("⏪ UNDO"):
-        st.session_state.draft = " ".join(st.session_state.draft.strip().split()[:-1])
-        st.rerun()
-    if st.button("🗑️ CZYŚĆ WSZYSTKO", type="secondary"):
-        st.session_state.draft = ""
-        st.rerun()
+    up_1 = st.file_uploader("Zdjęcie 1 (<IMAGE_1>):", type=['jpg','png','jpeg'])
+    up_2 = st.file_uploader("Zdjęcie 2 (<IMAGE_2>):", type=['jpg','png','jpeg']) if "Duo" in mode or "Trio" in mode else None
+    up_3 = st.file_uploader("Zdjęcie 3 (<IMAGE_3>):", type=['jpg','png','jpeg']) if "Trio" in mode else None
 
-# --- PANEL PODGLĄDU I REŻYSERII ---
+    if st.button("✨ Resetuj Draft"): st.session_state.draft = ""; st.rerun()
+    if st.button("⏪ Undo"): 
+        st.session_state.draft = " ".join(st.session_state.draft.strip().split()[:-1]); st.rerun()
+
+# --- PANEL REŻYSERSKI 3x2 ---
+st.subheader("🖼️ Panel Kontrolny")
 col_img, col_ui = st.columns([1, 2])
 with col_img:
-    if up_1: st.image(up_1, caption="REF 1 (Rafał)", use_container_width=True)
-    if up_2: st.image(up_2, caption="REF 2", use_container_width=True)
-    if up_3: st.image(up_3, caption="REF 3", use_container_width=True)
+    c1, c2 = st.columns(2)
+    with c1: 
+        if up_1: st.image(up_1, caption="IMAGE_1", use_container_width=True)
+    with c2: 
+        if up_2: st.image(up_2, caption="IMAGE_2", use_container_width=True)
+    if up_3: st.image(up_3, caption="IMAGE_3", use_container_width=True)
 
 with col_ui:
-    r1c1, r1c2, r1c3 = st.columns(3)
-    with r1c1:
-        st.subheader("🎥 Kamera")
-        cam = st.selectbox("Styl:", ["handheld selfie shake", "360 orbit rotate", "steady close-up", "whip pan"])
+    r1, r2 = st.rows(2) # Wizualny podział na 6 sekcji
+    
+    # Rząd 1
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.write("🎥 **Kamera**")
+        cam = st.selectbox("Ujęcie:", ["steady close-up", "orbit 360", "handheld shake", "whip pan", "dolly zoom"])
         if st.button("➕ Kamera"): st.session_state.draft += f"[camera: {cam}] "
-    with r1c2:
-        st.subheader("🎙️ Dialog")
-        txt = st.text_input("Co mówią?")
-        spk = st.selectbox("Kto mówi:", ["Dziewczyna 1", "Dziewczyna 2", "Rafał"])
+    with c2:
+        st.write("🎙️ **Dialog**")
+        txt = st.text_input("Tekst:")
+        who = st.selectbox("Mówi:", ["Osoba 1", "Osoba 2", "Osoba 3"])
         if st.button("➕ Dialog"):
-            # Mapowanie na tagi person zgodne z IMAGE_N
-            who = "person 2" if "1" in spk else ("person 3" if "2" in spk else "person 1")
-            st.session_state.draft += f"[voice: polish {who}] \"{txt}\" [pause: 0.5s] "
-    with r1c3:
-        st.subheader("💃 Ruch")
-        act = st.text_input("Akcja (PL):")
-        if st.button("➕ Ruch"):
-            st.session_state.draft += f"{elon_translator(act, 'motion')} "
+            tag = who[-1]
+            st.session_state.draft += f"[voice: polish person {tag}] \"{txt}\" [pause: 0.5s] "
+    with c3:
+        st.write("🕺 **Interakcja**")
+        inter = st.selectbox("Akcja:", ["patrzą na siebie", "obejmują się", "kłócą się", "dziubek do selfie"])
+        if st.button("➕ Interakcja"):
+            st.session_state.draft += f"[motion: high-fidelity facial interaction between characters, {inter}] "
 
-# --- SEKCJA RENDEROWANIA ---
+    # Rząd 2
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        st.write("🎵 **Muzyka**")
+        mus = st.selectbox("Styl:", ["Cinematic", "Hip-Hop", "Techno", "Romantic"])
+        if st.button("➕ Audio"): st.session_state.draft += f"[audio: background {mus.lower()}] "
+    with c5:
+        st.write("🔊 **SFX**")
+        sfx = st.selectbox("Efekt:", ["Applause", "Laughter", "Thunder", "Scream"])
+        if st.button("➕ SFX"): st.session_state.draft += f"[audio: {sfx.lower()}] "
+    with c6:
+        st.write("🎭 **Filtry**")
+        fil = st.selectbox("Filtr:", ["Whisper", "Radio", "Echo", "Robot"])
+        if st.button("➕ Filtr"): st.session_state.draft += f"[audio: {fil.lower()}] "
+
+# --- RENDER (The interaction Fix) ---
 st.divider()
-st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=150)
+st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=120)
 
 col_q, col_d = st.columns(2)
-with col_q:
-    res_opt = st.selectbox("Jakość:", ["480p", "720p"], index=0)
-with col_d:
-    dur = st.slider("Długość (max 10s dla Reference):", 5, 10, 10)
+with col_q: res = st.selectbox("Jakość:", ["480p", "720p"])
+with col_d: dur = st.slider("Długość (s):", 5, 10, 10)
 
-if st.button("🚀 WYPAL TRIO-SELFIE", type="primary", use_container_width=True):
-    if not (up_1 and up_2 and up_3):
-        st.error("⚠️ Do trybu Trio potrzebujesz wgrać wszystkie 3 zdjęcia!"); st.stop()
-    
-    with st.spinner("Inicjacja silnika Memphis... To potrwa moment."):
+if st.button("🚀 WYPAL FINALNE WIDEO", type="primary", use_container_width=True):
+    if not up_1: st.error("Wgraj zdjęcie!"); st.stop()
+    with st.spinner("Synchronizacja postaci i renderowanie..."):
         try:
-            # Tworzenie pętli zdarzeń dla bezpiecznego Async w Streamlit
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
+            loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
             client = xai_sdk.AsyncClient(api_key=api_key)
             
-            # Kodowanie obrazów do base64
-            refs = [
-                f"data:image/jpeg;base64,{base64.b64encode(up_1.getvalue()).decode()}",
-                f"data:image/jpeg;base64,{base64.b64encode(up_2.getvalue()).decode()}",
-                f"data:image/jpeg;base64,{base64.b64encode(up_3.getvalue()).decode()}"
-            ]
+            # Przygotowanie listy referencyjnej zgodnie z doku
+            refs = [f"data:image/jpeg;base64,{base64.b64encode(up_1.getvalue()).decode()}"]
+            if up_2: refs.append(f"data:image/jpeg;base64,{base64.b64encode(up_2.getvalue()).decode()}")
+            if up_3: refs.append(f"data:image/jpeg;base64,{base64.b64encode(up_3.getvalue()).decode()}")
             
-            async def start_render():
+            # FINALNY PROMPT (dodajemy definicję ról na początku automatycznie)
+            prefix = "[character: <IMAGE_1> is person 1"
+            if up_2: prefix += ", <IMAGE_2> is person 2"
+            if up_3: prefix += ", <IMAGE_3> is person 3"
+            prefix += "]. "
+            
+            final_p = prefix + st.session_state.draft
+            
+            async def render():
                 return await client.video.generate(
                     model="grok-imagine-video",
-                    prompt=st.session_state.draft,
+                    prompt=final_p,
                     reference_image_urls=refs,
                     duration=dur,
-                    resolution=res_opt,
-                    aspect_ratio="16:9",
-                    timeout=timedelta(minutes=15)
+                    resolution=res,
+                    aspect_ratio="16:9"
                 )
 
-            res_video = loop.run_until_complete(start_render())
-            st.video(requests.get(res_video.url).content)
-            st.success("🎬 Akcja! Wideo wygenerowane pomyślnie.")
-            
-        except Exception as e:
-            st.error(f"🔴 Błąd Trio: {str(e)}")
+            v_res = loop.run_until_complete(render())
+            st.video(requests.get(v_res.url).content)
+            st.success("✅ Sukces! Interakcja została wypalona.")
+        except Exception as e: st.error(f"🔴 Błąd: {str(e)}")
