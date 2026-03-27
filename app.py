@@ -5,7 +5,7 @@ import base64
 import requests
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION v8.15", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION v8.16", layout="wide", page_icon="🎬")
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -24,7 +24,6 @@ def elon_translator(text, context_type, subject=""):
     url = "https://api.x.ai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
-    # Precyzyjne szablony v8.12/v8.13
     templates = {
         "targeted_motion": f"[motion: {subject} is ..., high-fidelity cinematic movement]",
         "scene": "[scene: ..., cinematic environmental lighting]",
@@ -48,7 +47,7 @@ def elon_translator(text, context_type, subject=""):
     except: return f"[{context_type}: error]"
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director v8.15")
+st.title("🎥 RAWMOTION Director v8.16")
 if "draft" not in st.session_state: st.session_state.draft = ""
 if "logs" not in st.session_state: st.session_state.logs = []
 
@@ -91,23 +90,26 @@ with c_tools:
         if st.button("➕ Przygotuj Edycję"):
             st.session_state.draft += elon_translator(edit_desc, "edit") + "\n"
     else:
-        # ROZBUDOWANE WIDEO (v8.12)
+        # ROZBUDOWANE WIDEO (v8.12 + PL Opisy)
         r1c1, r1c2, r1c3 = st.columns(3)
         with r1c1:
             cam_opts = {
-                "Auto": "[camera: AI selection]",
-                "Full Body Shot": "[camera: full body long shot]",
-                "Medium Shot": "[camera: medium shot waist up]",
-                "Head-to-Hip Tilt": "[camera: slow tilt from head to hips]",
-                "Extreme Close-up": "[camera: extreme close-up]",
-                "Steady Orbit 360": "[camera: 360 orbit]",
-                "Dutch Angle": "[camera: dutch angle tilt]"
+                "Auto (AI Director)": "[camera: AI selection]",
+                "Full Body Shot (Cała sylwetka)": "[camera: full body long shot]",
+                "Medium Shot (Połowa sylwetki)": "[camera: medium shot waist up]",
+                "Head-to-Hip Tilt (Od głowy do bioder)": "[camera: slow tilt from head to hips]",
+                "Extreme Close-up (Zbliżenie na twarz)": "[camera: extreme close-up]",
+                "Steady Orbit 360 (Obrót dookoła)": "[camera: 360 orbit]",
+                "Dolly Zoom (Efekt Vertigo)": "[camera: dolly zoom]",
+                "Handheld Shaky (Z ręki)": "[camera: shaky handheld cam]",
+                "Dutch Angle (Pochylona kamera)": "[camera: cinematic dutch angle tilt]",
+                "Low Angle (Ujęcie z dołu)": "[camera: low angle hero shot]"
             }
             cam_key = st.selectbox("Kamera:", list(cam_opts.keys()))
             if st.button("➕ Kamera"): st.session_state.draft += cam_opts[cam_key] + "\n"
         with r1c2:
             txt = st.text_input("Dialog:")
-            who = st.selectbox("Kto mówi:", ["1", "2"] if "Interactions" in mode else ["1"])
+            who = st.selectbox("Mówi:", ["1", "2"] if "Interactions" in mode else ["1"])
             if st.button("➕ Głos"): st.session_state.draft += f"[voice: polish person {who}] \"{txt}\" [pause: 1.0s]\n"
         with r1c3:
             subj = st.text_input("Kto działa?", value="person 1")
@@ -120,26 +122,32 @@ with c_tools:
             env = st.text_input("Scena:")
             if st.button("➕ Scena"): st.session_state.draft += elon_translator(env, "scene") + "\n"
         with r2c2:
-            mus = st.selectbox("Muzyka:", ["None", "Cinematic Orchestral", "Summer Lofi", "Cyberpunk Techno", "Dark Jazz"])
+            mus = st.selectbox("Muzyka:", [
+                "None", "Cinematic Orchestral", "Summer Lofi HipHop", "Romantic Piano", 
+                "Cyberpunk Techno", "Dark Jazz Noir", "Heavy Metal Energy", "Elevator Chill"
+            ])
             if st.button("➕ Muzyka"): st.session_state.draft += f"[audio: background {mus.lower()}]\n"
         with r2c3:
-            sfx = st.selectbox("SFX:", ["Laughter", "Beach waves", "Rain & Thunder", "Forest Birds", "Coffee shop"])
+            sfx = st.selectbox("SFX:", [
+                "Laughter", "Beach waves", "Rain & Thunder", "Forest Birds", 
+                "Street Traffic", "Crowd Applause", "Footsteps on wood", "Coffee shop ambiance"
+            ])
             if st.button("➕ SFX"): st.session_state.draft += f"[audio: {sfx.lower()}]\n"
 
 # --- RENDER & LOGS ---
 st.divider()
 st.session_state.draft = st.text_area("🛠️ OŚ CZASU (DRAFT):", value=st.session_state.draft, height=180)
 
-with st.expander("📓 LOGI REŻYSERA"):
+with st.expander("📓 LOGI REŻYSERA (Director's Log)"):
+    if not st.session_state.logs: st.write("Czekam na akcje...")
     for log in st.session_state.logs: st.text(log)
 
-# Logika widoczności parametrów v8.13
 if "Magic Edit" not in mode:
     c_res, c_dur = st.columns(2)
     with c_res: res = st.selectbox("Jakość:", ["480p", "720p"], index=1)
     with c_dur: dur = st.slider("Długość klipu (s):", 1, 15, 10)
 else:
-    res, dur = "720p", 1 # Domyślne dla foto
+    res, dur = "720p", 1 
 
 if st.button("🚀 WYPAL FINALNE DZIEŁO", type="primary", use_container_width=True):
     if not up_1: st.error("Brak obrazu!"); st.stop()
@@ -160,7 +168,7 @@ if st.button("🚀 WYPAL FINALNE DZIEŁO", type="primary", use_container_width=T
                     return await client.video.generate(model="grok-imagine-video", prompt=st.session_state.draft, reference_image_urls=refs, duration=dur, resolution=res)
 
             res_data = loop.run_until_complete(run())
-            if "Magic Edit" in mode: st.image(res_data.url)
+            if "Magic Edit" in mode: st.image(res_data.url, caption="✅ Zedytowane Zdjęcie")
             else: st.video(requests.get(res_data.url).content)
             st.session_state.logs.append("✅ Render OK.")
         except Exception as e: st.error(f"Błąd: {e}"); st.session_state.logs.append(f"🔴 BŁĄD: {e}")
