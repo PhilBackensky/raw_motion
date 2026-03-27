@@ -164,4 +164,3 @@ if st.button("🚀 WYPAL FINALNE DZIEŁO", type="primary", use_container_width=T
         except Exception as e: 
             st.error(f"Błąd: {e}")
             st.session_state.logs.append(f"🔴 BŁĄD SILNIKA: {str(e)}")
-            
