@@ -3,10 +3,9 @@ import xai_sdk
 import asyncio
 import base64
 import requests
-from datetime import timedelta
 
 # --- 1. CONFIG & SECURITY ---
-st.set_page_config(page_title="RAWMOTION v8.10", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="RAWMOTION v8.11", layout="wide", page_icon="🎬")
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -18,28 +17,22 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True; st.rerun()
         else: st.error("Błędne hasło."); st.stop()
 
-# --- 2. CORE ENGINE & UPDATED TRANSLATOR (v8.10) ---
+# --- 2. CORE ENGINE ---
 api_key = st.secrets["XAI_API_KEY"]
 
 def elon_translator(text, context_type, subject=""):
     url = "https://api.x.ai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
-    # Kategoria instrukcji: ZAKAZ KOMPRESJI DETALI
-    if context_type == "edit" or context_type == "targeted_motion":
-        # Wymuszamy na Groku zachowanie detali ubioru i przymiotników.
-        system_instruction = "Translate the Polish text to English technical tag 1:1. CRITICAL: DO NOT COMPRESS. Preserved all clothing details, adjectives, and colors. Output ONLY the technical tag."
-    else:
-        system_instruction = "Translate the Polish text to English technical tag for Memphis engine. Output ONLY the technical tag."
-
     templates = {
-        "targeted_motion": f"[motion: {subject} is ..., high-fidelity interaction]", 
-        "scene": "[scene: ..., cinematic environmental lighting]",
+        "targeted_motion": f"[motion: {subject} is ..., high-fidelity movement]",
+        "scene": "[scene: ..., cinematic lighting]",
         "edit": "[clothing_edit: ..., preserving original pose 1:1]"
     }
     
     template = templates.get(context_type, "[...] ")
-    full_prompt = f"{system_instruction} Using this format template: {template}. Polish Text: {text}"
+    system_instruction = "Translate to technical English tag for Memphis engine. DO NOT COMPRESS DETAILS. Output ONLY the resulting tag."
+    full_prompt = f"{system_instruction} Template: {template}. Polish Text: {text}"
     
     try:
         res = requests.post(url, headers=headers, json={
@@ -48,25 +41,26 @@ def elon_translator(text, context_type, subject=""):
             "temperature": 0.1
         })
         return res.json()['choices'][0]['message']['content']
-    except: return f"[{context_type}: translation error]"
+    except: return f"[{context_type}: error]"
 
 # --- 3. INTERFACE ---
-st.title("🎥 RAWMOTION Director v8.10 (Details)")
+st.title("🎥 RAWMOTION Director v8.11")
 if "draft" not in st.session_state: st.session_state.draft = ""
 
 # SIDEBAR
 with st.sidebar:
     st.header("🎞️ Studio Setup")
-    mode = st.radio("Tryb pracy:", ["🎬 Interactions (Duo/Trio)", "🪄 Magic Edit (1 Foto)"])
+    # Nowy tryb: Single Photo Video
+    mode = st.radio("Tryb pracy:", ["🎬 Single Photo Video (Ożywianie)", "🎬 Interactions (Duo/Trio)", "🪄 Magic Edit (Static)"])
     st.divider()
-    up_1 = st.file_uploader("Postać 1 (<IMAGE_1>):", type=['jpg','png','jpeg'])
-    up_2 = st.file_uploader("Postać 2 (<IMAGE_2>):", type=['jpg','png','jpeg']) if "Interactions" in mode else None
+    up_1 = st.file_uploader("Zdjęcie Główne (<IMAGE_1>):", type=['jpg','png','jpeg'])
+    up_2 = st.file_uploader("Zdjęcie 2 (<IMAGE_2>):", type=['jpg','png','jpeg']) if "Interactions" in mode else None
     
     if st.button("✨ CZYŚĆ PROMPT"): st.session_state.draft = ""; st.rerun()
     if st.button("⏪ UNDO"): 
         st.session_state.draft = "\n".join(st.session_state.draft.strip().split("\n")[:-1]); st.rerun()
 
-# PANEL REŻYSERSKI 3x2
+# PANEL REŻYSERSKI
 c_img, c_tools = st.columns([1, 2])
 
 with c_img:
@@ -74,73 +68,65 @@ with c_img:
     if up_1: st.image(up_1, caption="IMAGE_1", use_container_width=True)
     if up_2: st.image(up_2, caption="IMAGE_2", use_container_width=True)
     
+    # KROK 1: LOCK
     if st.button("👥 KROK 1: LOCK CHARACTERS", use_container_width=True):
-        line = f"[character: <IMAGE_1> is person 1 on the left"
-        if up_2: line += ", <IMAGE_2> is person 2 on the right"
-        line += ". Preserve faces and bodies 1:1.]"
+        if "Single" in mode:
+            line = "[character: <IMAGE_1> contains all subjects. Preserve their faces and builds exactly as shown.]"
+        else:
+            line = f"[character: <IMAGE_1> is person 1"
+            if up_2: line += ", <IMAGE_2> is person 2"
+            line += ". Preserve identities 1:1.]"
         st.session_state.draft += line + "\n"
 
 with c_tools:
-    if "Interactions" in mode:
+    if "Video" in mode or "Interactions" in mode:
         # Rząd 1
         r1_c1, r1_c2, r1_c3 = st.columns(3)
         with r1_c1:
             st.write("🎥 **Kamera**")
-            cam_list = {
-                "Auto (AI Director)": "AI wybiera ujęcie",
-                "steady close-up": "Stabilne zbliżenie",
-                "orbit 360": "Pełny obrót",
-                "handheld shake": "Z ręki (dynamiczne)",
-                "dolly zoom": "Najazd (Vertigo effect)",
-                "static selfie": "Styl selfie"
-            }
-            cam_key = st.selectbox("Wybierz ujęcie:", list(cam_list.keys()), format_func=lambda x: f"{x} - {cam_list[x]}")
+            cam = st.selectbox("Ujęcie:", ["Auto (AI Director)", "steady close-up", "orbit 360", "dolly zoom", "handheld shake"])
             if st.button("➕ Kamera"):
-                tag = "[camera: AI selects best dynamic angle]" if "Auto" in cam_key else f"[camera: {cam_key}]"
+                tag = "[camera: AI selection]" if "Auto" in cam else f"[camera: {cam}]"
                 st.session_state.draft += tag + "\n"
         
         with r1_c2:
             st.write("🎙️ **Dialogi**")
             txt = st.text_input("Tekst:")
-            who = st.selectbox("Mówi:", ["Osoba 1 (Lewa)", "Osoba 2 (Prawa)"])
+            # Dynamiczny wybór osób
+            who_opt = ["Person 1", "Person 2"] if "Interactions" in mode else ["Osoba ze zdjęcia"]
+            who = st.selectbox("Kto mówi:", who_opt)
             if st.button("➕ Głos"):
-                p_id = who.split()[1]
-                pos = "left" if p_id == "1" else "right"
-                st.session_state.draft += f"[voice: polish person {p_id} on the {pos}] \"{txt}\" [pause: 1.0s]\n"
+                p_id = "1" if "1" in who or "Osoba" in who else "2"
+                st.session_state.draft += f"[voice: polish person {p_id}] \"{txt}\" [pause: 1.0s]\n"
         
         with r1_c3:
-            st.write("🕺 **Akcja Postaci**")
-            subj = st.selectbox("Kto:", ["both together", "person 1", "person 2"])
-            act_pl = st.text_input("Ruch i Ubiór (PL):", placeholder="np. stoją w skąpym bikini")
-            if st.button("➕ Akcja (v8.10 Fix)"):
-                # Nowa logika tłumaczenia zachowująca detale
-                st.session_state.draft += elon_translator(act_pl, "targeted_motion", subj) + "\n"
+            st.write("🕺 **Akcja / Ruch**")
+            # Przy jednym zdjęciu pozwalamy wpisać dowolny podmiot (np. "blondynka")
+            subj_val = st.text_input("Kto działa? (np. person 1, blondynka):", value="person 1")
+            act_pl = st.text_input("Co robi? (np. macha ręką):")
+            if st.button("➕ Akcja"):
+                st.session_state.draft += elon_translator(act_pl, "targeted_motion", subj_val) + "\n"
 
         st.divider()
         # Rząd 2
         r2_c1, r2_c2, r2_c3 = st.columns(3)
         with r2_c1:
-            st.write("🌍 **Tło i Scena**")
-            env = st.text_input("Gdzie są? (np. plaża):")
+            st.write("🌍 **Tło / Scena**")
+            env = st.text_input("Zmień tło (PL):")
             if st.button("➕ Scena"):
                 st.session_state.draft += elon_translator(env, "scene") + "\n"
         with r2_c2:
-            st.write("🎵 **Muzyka Tła**")
-            bg_mus = st.selectbox("Styl:", ["None", "Cinematic Pop", "Romantic Piano", "Summer Chill", "Epic Orchestral"])
+            st.write("🎵 **Muzyka**")
+            bg_m = st.selectbox("Styl:", ["None", "Cinematic", "Summer Pop", "Dark Tension"])
             if st.button("➕ Muzyka"):
-                st.session_state.draft += f"[audio: background {bg_mus.lower()}]\n"
+                st.session_state.draft += f"[audio: background {bg_m.lower()}]\n"
         with r2_c3:
-            st.write("🔊 **Efekty SFX**")
-            sfx = st.selectbox("SFX:", ["Laughter", "Applause", "Birds", "Beach waves"])
+            st.write("🔊 **SFX**")
+            sfx = st.selectbox("Efekt:", ["Laughter", "Applause", "Beach waves", "City"])
             if st.button("➕ SFX"):
                 st.session_state.draft += f"[audio: {sfx.lower()}]\n"
 
-    else: # MAGIC EDIT
-        edit_desc = st.text_area("Opisz zmianę (np. strój kąpielowy):")
-        if st.button("🪄 Edytuj Foto"):
-            st.session_state.draft = f"[character: <IMAGE_1> is same person] " + elon_translator(edit_desc, "edit")
-
-# --- RENDER ENGINE ---
+# RENDER
 st.divider()
 st.session_state.draft = st.text_area("🛠️ TWOJA OŚ CZASU (DRAFT):", value=st.session_state.draft, height=200)
 
@@ -150,7 +136,7 @@ with c_dur: dur = st.slider("Długość klipu (sekundy):", 1, 15, 10)
 
 if st.button("🚀 WYPAL FINALNE DZIEŁO", type="primary", use_container_width=True):
     if not up_1: st.error("Wgraj zdjęcie!"); st.stop()
-    with st.spinner(f"Silnik Memphis renderuje ({dur}s)..."):
+    with st.spinner(f"Ożywianie obrazu ({dur}s)..."):
         try:
             loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
             client = xai_sdk.AsyncClient(api_key=api_key)
@@ -161,16 +147,10 @@ if st.button("🚀 WYPAL FINALNE DZIEŁO", type="primary", use_container_width=T
                 if "Magic Edit" in mode:
                     return await client.image.generate(model="grok-imagine-image-edit", prompt=st.session_state.draft, image_url=refs[0])
                 else:
-                    return await client.video.generate(
-                        model="grok-imagine-video", 
-                        prompt=st.session_state.draft, 
-                        reference_image_urls=refs, 
-                        duration=dur, 
-                        resolution=res
-                    )
+                    return await client.video.generate(model="grok-imagine-video", prompt=st.session_state.draft, reference_image_urls=refs, duration=dur, resolution=res)
 
             res_data = loop.run_until_complete(run())
             if "Magic Edit" in mode: st.image(res_data.url)
             else: st.video(requests.get(res_data.url).content)
-            st.success("🎬 Gotowe!")
+            st.success("🎬 Akcja!")
         except Exception as e: st.error(f"🔴 Błąd: {str(e)}")
